@@ -17,3 +17,9 @@ The build needs the game's managed assemblies and the installed Together v5
 multiplayer DLLs. A successful build copies `CatPatch.dll` into the game folder
 set by `BaseGamePath`. Set `SteamPluginDir` only if you also want it copied to a
 second game installation for testing purposes.
+
+## Editing Voice lines
+
+Uh, voice lines are located in TalkerCatPatch.cs and KissDialogue.cs
+Yikes those are some weird ass fucking lines I wrote with my friends at like 1 am
+I am more open to changing them
