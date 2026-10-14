@@ -5,7 +5,7 @@ This is the active CatPatch project and the target for new work.
 - Multiplayer target: `CasualtiesMP` / Together
 - Target framework: .NET Standard 2.1
 - Namespace: `CatPatchspace`
-- Host-transfer work: experimental (ass); see `V5_PORT_STATUS.md`
+- Host-transfer: Complete Ass probably
 
 ## Building from source
 
