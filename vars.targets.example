@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Change this to the folder containing your CasualtiesUnknown_Data and BepInEx folders. -->
+    <BaseGamePath>C:\Games\Casualties Unknown Demo</BaseGamePath>
+    <BepInExDir>$(BaseGamePath)\BepInEx</BepInExDir>
+    <GameAssembliesDir>$(BaseGamePath)\CasualtiesUnknown_Data\Managed</GameAssembliesDir>
+    <!-- Change this if Together is installed in a different game folder. -->
+    <V5MultiplayerDir>$(BepInExDir)\plugins\Together</V5MultiplayerDir>
+    <PluginDirName>CatPatch</PluginDirName>
+    <!-- Optional second installation for automatic DLL copying after a build. -->
+    <SteamPluginDir></SteamPluginDir>
+  </PropertyGroup>
+</Project>

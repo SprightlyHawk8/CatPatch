@@ -1,12 +1,19 @@
-# CatPatch v5 — active
+# CatPatch v5
 
 This is the active CatPatch project and the target for new work.
 
-- Status: released to public, bugtesting
 - Multiplayer target: `CasualtiesMP` / Together
 - Target framework: .NET Standard 2.1
 - Namespace: `CatPatchspace`
-- Host-transfer work: experimental; see `V5_PORT_STATUS.md`
+- Host-transfer work: experimental (ass); see `V5_PORT_STATUS.md`
 
-Do not copy v4 multiplayer code directly into this project. Compare against
-v4 or historical references only when the v5 API equivalent is understood.
+## Building from source
+
+Copy `vars.targets.example` to `vars.targets` in this folder, then edit the
+paths for your own Casualties: Unknown installation. `vars.targets` is ignored
+by Git and should stay local to your computer.
+
+The build needs the game's managed assemblies and the installed Together v5
+multiplayer DLLs. A successful build copies `CatPatch.dll` into the game folder
+set by `BaseGamePath`. Set `SteamPluginDir` only if you also want it copied to a
+second game installation for testing purposes.

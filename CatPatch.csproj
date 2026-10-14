@@ -13,10 +13,9 @@
 		</RestoreAdditionalProjectSources>
     <RootNamespace>CatPatchspace</RootNamespace>
     <Platforms>AnyCPU;x64;x86</Platforms>
-    <V5MultiplayerDir>C:\Program Files (x86)\Steam\steamapps\common\Casualties Unknown Demo\BepInEx\plugins\Together</V5MultiplayerDir>
   </PropertyGroup>
 
-  <Import Project="../vars.targets" />
+  <Import Project="vars.targets" />
 
   <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
