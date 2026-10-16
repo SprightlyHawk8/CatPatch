@@ -55,6 +55,18 @@ namespace CatPatchspace
         private static GUIStyle _actionButtonStyle;
         private static GUIStyle _playerButtonStyle;
         private static bool _stylesReady;
+        // Unity rejects RectOffset construction from this MonoBehaviour's static constructor.
+        private static RectOffset _zeroMargin;
+        private static RectOffset ZeroMargin
+        {
+            get
+            {
+                if (_zeroMargin == null)
+                    _zeroMargin = new RectOffset(0, 0, 0, 0);
+                return _zeroMargin;
+            }
+        }
+        private static readonly GUIContent RowMeasure = new GUIContent("0");
         private static bool _buttonSkinFailed;
 
         private void Update()
@@ -232,7 +244,7 @@ namespace CatPatchspace
                     {
                         GUI.skin.label.alignment = TextAnchor.MiddleCenter;
                         GUI.skin.label.wordWrap = false;
-                        GUI.skin.label.margin = new RectOffset(0, 0, 0, 0);
+                        GUI.skin.label.margin = ZeroMargin;
                         GUI.skin.label.fontSize = Mathf.RoundToInt(fontSize * 1.3f);
                         GUILayout.Label(GetLang("netpanel_title") + " v3.1.2", GUILayout.Height(GUI.skin.label.fontSize * 1.75f));
 
@@ -485,7 +497,7 @@ namespace CatPatchspace
             if (player == null)
                 return;
 
-            float rowHeight = Mathf.Max(22f, GUI.skin.label.CalcSize(new GUIContent("0")).y);
+            float rowHeight = Mathf.Max(22f, GUI.skin.label.CalcSize(RowMeasure).y);
             GUILayout.BeginHorizontal(GUILayout.Height(rowHeight));
 
             try

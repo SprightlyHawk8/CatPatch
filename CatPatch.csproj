@@ -76,7 +76,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="HostTransferControllerV5.cs" />
+    <Compile Remove="features/HostTransfer/HostTransferControllerV5.cs" />
   </ItemGroup>
 
   <PropertyGroup>

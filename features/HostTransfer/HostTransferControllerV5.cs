@@ -305,7 +305,7 @@ namespace CatPatchspace
             {
                 LastBeforeGenerationState generationState =
                     WorldGeneration_GenerateWorld_MultiplayerPatch.firstworldgenparams;
-                string runSettings = WorldgenPatches.CompileRunSettings() ?? "";
+                string runSettings = WorldMP.CompileRunSettings() ?? "";
                 List<ScavPlayer> players = CapturePlayers();
 
                 bool hasQolSeed;
