@@ -20,7 +20,7 @@ second game installation for testing purposes.
 
 ## Editing Voice lines
 
-Uh, voice lines are located in TalkerCatPatch.cs and KissDialogue.cs
+Uh, voice lines are located in libs/TalkerCatPatch.cs and features/Kiss/KissDialogue.cs
 
 Yikes those are some weird ass fucking lines I wrote with my friends at like 1 am
 

@@ -1,6 +1,5 @@
-using Together;
 using System;
-using System.Reflection;
+using Together;
 using UnityEngine;
 
 namespace CatPatchspace
@@ -395,41 +394,61 @@ namespace CatPatchspace
             }
         }
 
+        private static float GetMenuScale()
+        {
+            try
+            {
+                return Mathf.Clamp(UIMainMenu.GetMenuUIScale(), 0.5f, 3f);
+            }
+            catch
+            {
+                return 1f;
+            }
+        }
+
+        private static GUIStyle _buttonStyle;
+        private static float _buttonStyleScale = float.NaN;
+        private static Texture2D _buttonStyleTexture;
+
+        // copied once per scale or texture change. rebuilding this every repaint was the frame cost.
         private static GUIStyle CreateKrokStyleButton()
         {
             float scale = GetMenuScale();
-            GUIStyle style = new GUIStyle(GUI.skin.button)
+
+            Texture2D normal = null;
+            try
             {
-                fontSize = Mathf.RoundToInt(14f * scale),
+                normal = UIBullshit.tex_button_normal;
+            }
+            catch
+            {
+            }
+
+            int fontSize = Mathf.RoundToInt(14f * scale);
+            if (_buttonStyle != null
+                && Mathf.Abs(_buttonStyleScale - scale) < 0.001f
+                && _buttonStyleTexture == normal
+                && _buttonStyle.fontSize == fontSize)
+                return _buttonStyle;
+
+            _buttonStyleScale = scale;
+            _buttonStyleTexture = normal;
+            _buttonStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = fontSize,
                 fontStyle = FontStyle.Normal,
                 alignment = TextAnchor.MiddleCenter
             };
 
             try
             {
-                InvokeKrokStaticMethod("UIBullshit", "_GUI_SetButtonSkinTexture", style, true);
-            }
-            catch
-            {
-                // Fall back to the default Unity GUI button style if Krok's helper changes.
-            }
-
-            return style;
-        }
-
-        private static float GetMenuScale()
-        {
-            try
-            {
-                object result = InvokeKrokStaticMethod("UIMainMenu", "GetMenuUIScale");
-                if (result is float)
-                    return Mathf.Clamp((float)result, 0.5f, 3.0f);
+                UIBullshit._GUI_SetButtonSkinTexture(_buttonStyle, true);
             }
             catch
             {
             }
 
-            return 1.0f;
+            return _buttonStyle;
         }
 
         private static bool TryGetKrokMenuOpen()
@@ -445,55 +464,12 @@ namespace CatPatchspace
 
             try
             {
-                if (UIMainMenu.mainmenu_open)
-                    return true;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                object result = InvokeKrokStaticMethod("UIMainMenu", "IsOpen");
-                return result is bool && (bool)result;
+                return UIMainMenu.IsOpen();
             }
             catch
             {
                 return false;
             }
-        }
-
-        private static object InvokeKrokStaticMethod(string typeName, string methodName, params object[] args)
-        {
-            Type type = FindKrokType(typeName);
-            if (type == null)
-                return null;
-
-            MethodInfo method = type.GetMethod(
-                methodName,
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-
-            if (method == null)
-                return null;
-
-            return method.Invoke(null, args);
-        }
-
-        private static Type FindKrokType(string typeName)
-        {
-            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            for (int i = 0; i < assemblies.Length; i++)
-            {
-                Type type = assemblies[i].GetType("Together." + typeName);
-                if (type != null)
-                    return type;
-
-                type = assemblies[i].GetType(typeName);
-                if (type != null)
-                    return type;
-            }
-
-            return null;
         }
     }
 }
