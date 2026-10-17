@@ -10,7 +10,7 @@ namespace CatPatchspace
     {
         public const string ModGUID = "meow.catpatch";
         public const string ModName = "CatPatch";
-        public const string ModVersion = "1.0.6";
+        public const string ModVersion = "1.0.7";
 
         internal static new ManualLogSource Logger;
         private readonly Harmony _harmony = new(ModGUID);
