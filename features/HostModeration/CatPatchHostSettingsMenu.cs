@@ -157,6 +157,10 @@ namespace CatPatchspace
             DrawUpdaterControls(labelStyle, buttonStyle);
 
             GUILayout.Space(12f);
+            if (GUILayout.Button("Command Guide", buttonStyle, GUILayout.Height(48f)))
+                Application.OpenURL("https://docs.google.com/document/d/1GjxQX9F18oRt4x5wLz92A3mCWbfZf1Cnyh1i9OmPuoU/edit?usp=sharing");
+
+            GUILayout.Space(8f);
             if (GUILayout.Button("Suggest a feature, join the discord", buttonStyle, GUILayout.Height(48f)))
                 Application.OpenURL("https://discord.gg/vdrXr6vXHZ");
 

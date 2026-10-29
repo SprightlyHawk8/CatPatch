@@ -86,6 +86,7 @@ namespace CatPatchspace
         private void Awake()
         {
             _instance = this;
+            Plugin.Logger.LogInfo("[SelfHarmRescue] controller initialized; AttemptHarm routes through rescue tracking.");
         }
 
         private void OnDestroy()
@@ -366,6 +367,7 @@ namespace CatPatchspace
             SendInterventionToServer(targetClientId);
             _activeMinigame = new RescueSwipeMinigame(this, targetClientId, SafePlayerName(targetClientId));
             StartCatPatchMinigame(_activeMinigame);
+            Plugin.Logger.LogInfo("[SelfHarmRescue] rescuer minigame started target=" + CatPatchNetId.ToDisplay(targetClientId));
             return true;
         }
 
@@ -2246,6 +2248,13 @@ namespace CatPatchspace
     [HarmonyPatch(typeof(SelfHarmer), "SelfHarm")]
     internal static class SelfHarmerSelfHarmCatPatch
     {
+        internal static IEnumerator CreateRoutine(SelfHarmer harmer)
+        {
+            IEnumerator routine = null;
+            Prefix(harmer, ref routine);
+            return routine;
+        }
+
         private static bool Prefix(SelfHarmer __instance, ref IEnumerator __result)
         {
             Body body = __instance != null ? __instance.GetComponent<Body>() : null;
@@ -2274,6 +2283,13 @@ namespace CatPatchspace
     [HarmonyPatch(typeof(SelfHarmer), "Suicide")]
     internal static class SelfHarmerSuicideCatPatch
     {
+        internal static IEnumerator CreateRoutine(SelfHarmer harmer)
+        {
+            IEnumerator routine = null;
+            Prefix(harmer, ref routine);
+            return routine;
+        }
+
         private static bool Prefix(SelfHarmer __instance, ref IEnumerator __result)
         {
             Body body = __instance != null ? __instance.GetComponent<Body>() : null;

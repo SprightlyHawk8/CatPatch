@@ -591,7 +591,7 @@ namespace CatPatchspace
                 commit.Put(hasWorldgenState);
                 if (hasWorldgenState)
                     commit.Put(worldgenState);
-                string runSettings = WorldgenPatches.CompileRunSettings() ?? "";
+                string runSettings = WorldMP.CompileRunSettings() ?? "";
                 commit.Put(runSettings, true);
                 QoLSeedState qoLSeedState = QoLHostTransferCompatibility.CaptureSourceSeedState();
                 commit.Put(qoLSeedState.QoLPresent);
@@ -1564,7 +1564,7 @@ namespace CatPatchspace
                         LogWarning("transferred run settings are empty id=" + transferId);
                         return;
                     }
-                    WorldgenPatches.ApplyRunSettings(runSettings);
+                    WorldMP.ApplyRunSettings(in runSettings);
                     LogInfo("transferred run settings applied id=" + transferId +
                             " chars=" + runSettings.Length);
                 }
