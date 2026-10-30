@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>CatPatch.SprayChecks</AssemblyName>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <Import Project="../../vars.targets" />
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)/core/BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(GameAssembliesDir)/UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(GameAssembliesDir)/UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameAssembliesDir)/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Net.Http"><HintPath>$(GameAssembliesDir)/System.Net.Http.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(GameAssembliesDir)/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+    <Compile Include="../../features/Sprays/GifAnimationDecoder.cs" Link="GifAnimationDecoder.cs" />
+    <Compile Include="../../features/Sprays/GifAnimationData.cs" Link="GifAnimationData.cs" />
+    <Compile Include="../../libs/backendclient.cs" Link="backendclient.cs" />
+    <Compile Include="../../libs/backenderror.cs" Link="backenderror.cs" />
+    <Compile Include="../../features/Sprays/Sprayuploadrequest.cs" Link="Sprayuploadrequest.cs" />
+    <Compile Include="../../features/Sprays/Sprayuploadresponse.cs" Link="Sprayuploadresponse.cs" />
+  </ItemGroup>
+</Project>

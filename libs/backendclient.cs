@@ -1,9 +1,11 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 using Newtonsoft.Json;
 
 namespace CatPatchspace
@@ -11,6 +13,7 @@ namespace CatPatchspace
     internal static class GarythecatBackendClient
     {
         private const string BackendBaseUrl = "https://backend.cat-bot.de";
+        private static int _nextRequestId;
 
         private static readonly HttpClient Http = new HttpClient
         {
@@ -27,12 +30,19 @@ namespace CatPatchspace
                 png_base64 = Convert.ToBase64String(imageBytes ?? Array.Empty<byte>())
             };
 
-            return TryRequest(
+            bool success = TryRequest(
                 HttpMethod.Post,
                 "/sprays/upload",
                 payload,
                 out response,
                 out error);
+            if (success && (response == null || string.IsNullOrWhiteSpace(response.spray_id)))
+            {
+                error = "upload_response: spray_id_missing";
+                Plugin.Logger.LogWarning("[Sprays] stage=upload.response failed: " + error);
+                return false;
+            }
+            return success;
         }
 
         internal static bool DownloadSpray(
@@ -65,6 +75,9 @@ namespace CatPatchspace
         {
             response = default(T);
             error = null;
+            int requestId = Interlocked.Increment(ref _nextRequestId);
+            Stopwatch timer = Stopwatch.StartNew();
+            string stage = "serialize";
 
             try
             {
@@ -76,29 +89,37 @@ namespace CatPatchspace
                         request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                     }
 
+                    stage = "http.send";
+                    LogRequest(requestId, stage, method, path, timer, "started timeout_s=10");
                     using (HttpResponseMessage result = Http.SendAsync(request).GetAwaiter().GetResult())
                     {
+                        stage = "http.read";
+                        LogRequest(requestId, stage, method, path, timer, "status=" + (int)result.StatusCode);
                         string body = result.Content == null
                             ? ""
                             : result.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
                         if (!result.IsSuccessStatusCode)
                         {
-                            error = ExtractError(body, (int)result.StatusCode);
+                            error = "HTTP " + (int)result.StatusCode + ": " + ExtractError(body, (int)result.StatusCode);
+                            LogRequest(requestId, stage, method, path, timer, "failed " + error, true);
                             return false;
                         }
 
                         if (string.IsNullOrWhiteSpace(body))
-                            return true;
+                            throw new InvalidDataException("empty_response");
 
+                        stage = "json.decode";
                         T parsed = JsonConvert.DeserializeObject<T>(body);
                         if (parsed == null)
                         {
                             error = "empty_response";
+                            LogRequest(requestId, stage, method, path, timer, "failed " + error, true);
                             return false;
                         }
 
                         response = parsed;
+                        LogRequest(requestId, "complete", method, path, timer, "ok");
                         return true;
                     }
                 }
@@ -108,6 +129,8 @@ namespace CatPatchspace
                 error = IsConnectivityFailure(ex)
                     ? "backend_unreachable: " + ex.Message
                     : ex.Message;
+                LogRequest(requestId, stage, method, path, timer, DescribeException(ex), true);
+                error = stage + ": " + error;
 
                 return false;
             }
@@ -121,13 +144,19 @@ namespace CatPatchspace
         {
             response = null;
             error = null;
+            int requestId = Interlocked.Increment(ref _nextRequestId);
+            Stopwatch timer = Stopwatch.StartNew();
+            string stage = "http.send";
 
             try
             {
                 using (HttpRequestMessage request = new HttpRequestMessage(method, BuildUrl(path)))
                 {
+                    LogRequest(requestId, stage, method, path, timer, "started timeout_s=10");
                     using (HttpResponseMessage result = Http.SendAsync(request).GetAwaiter().GetResult())
                     {
+                        stage = "http.read";
+                        LogRequest(requestId, stage, method, path, timer, "status=" + (int)result.StatusCode);
                         byte[] bytes = result.Content == null
                             ? Array.Empty<byte>()
                             : result.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
@@ -135,11 +164,16 @@ namespace CatPatchspace
                         if (!result.IsSuccessStatusCode)
                         {
                             string body = Encoding.UTF8.GetString(bytes ?? Array.Empty<byte>());
-                            error = ExtractError(body, (int)result.StatusCode);
+                            error = "HTTP " + (int)result.StatusCode + ": " + ExtractError(body, (int)result.StatusCode);
+                            LogRequest(requestId, stage, method, path, timer, "failed " + error, true);
                             return false;
                         }
 
-                        response = bytes ?? Array.Empty<byte>();
+                        if (bytes == null || bytes.Length == 0)
+                            throw new InvalidDataException("empty_image_response");
+                        response = bytes;
+                        LogRequest(requestId, "complete", method, path, timer,
+                            "ok bytes=" + bytes.Length + " content_type=" + result.Content?.Headers.ContentType);
                         return true;
                     }
                 }
@@ -149,6 +183,8 @@ namespace CatPatchspace
                 error = IsConnectivityFailure(ex)
                     ? "backend_unreachable: " + ex.Message
                     : ex.Message;
+                LogRequest(requestId, stage, method, path, timer, DescribeException(ex), true);
+                error = stage + ": " + error;
 
                 return false;
             }
@@ -165,6 +201,35 @@ namespace CatPatchspace
                 path = "/" + path;
 
             return cleanBaseUrl + path;
+        }
+
+        private static void LogRequest(int id, string stage, HttpMethod method, string path,
+            Stopwatch timer, string detail, bool failed = false)
+        {
+            string line = "[Sprays] request=" + id + " stage=" + stage + " method=" + method
+                + " url=" + BuildUrl(path) + " elapsed_ms=" + timer.ElapsedMilliseconds
+                + " " + Sanitize(detail);
+            if (failed) Plugin.Logger.LogWarning(line);
+            else Plugin.Logger.LogInfo(line);
+        }
+
+        private static string DescribeException(Exception exception)
+        {
+            StringBuilder result = new StringBuilder("failed ");
+            for (Exception current = exception; current != null; current = current.InnerException)
+            {
+                result.Append(current.GetType().Name).Append(": ").Append(current.Message);
+                if (current is SocketException socket)
+                    result.Append(" socket_error=").Append(socket.SocketErrorCode);
+                if (current.InnerException != null) result.Append(" -> ");
+            }
+            return result.ToString();
+        }
+
+        private static string Sanitize(string value)
+        {
+            string clean = (value ?? "").Replace("\0", "").Replace('\r', ' ').Replace('\n', ' ');
+            return clean.Length <= 800 ? clean : clean.Substring(0, 800);
         }
 
         private static bool IsConnectivityFailure(Exception ex)

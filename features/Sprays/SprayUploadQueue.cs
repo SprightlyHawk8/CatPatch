@@ -53,7 +53,11 @@ namespace CatPatchspace
             Action<string> onFailed = null)
         {
             if (string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
+            {
+                Plugin.Logger.LogWarning("[Sprays] stage=upload.enqueue failed: source file missing");
+                onFailed?.Invoke("source_file_missing");
                 return;
+            }
 
             string cacheKey = BuildCacheKey(sourceFilePath);
 
@@ -62,6 +66,7 @@ namespace CatPatchspace
                 UploadCacheEntry cached;
                 if (_cacheByKey.TryGetValue(cacheKey, out cached))
                 {
+                    Plugin.Logger.LogInfo("[Sprays] stage=upload.cache hit id=" + cached.SprayId);
                     onUploaded?.Invoke(cached.SprayId, cached.ImageBytes, cached.SourceFilePath);
                     return;
                 }
@@ -97,6 +102,7 @@ namespace CatPatchspace
                     CacheKey = cacheKey,
                     SourceFilePath = sourceFilePath
                 });
+                Plugin.Logger.LogInfo("[Sprays] stage=upload.enqueue file=" + Path.GetFileName(sourceFilePath));
             }
         }
 
@@ -147,13 +153,15 @@ namespace CatPatchspace
 
                 if (string.IsNullOrWhiteSpace(completed.SprayId))
                 {
-                    Plugin.Logger.LogWarning("Spray upload failed: " + completed.Error);
+                    Plugin.Logger.LogWarning("[Sprays] stage=upload.failed file=" + Path.GetFileName(completed.SourceFilePath) + " error=" + completed.Error);
                     for (int i = 0; failureCallbacks != null && i < failureCallbacks.Count; i++)
                         failureCallbacks[i]?.Invoke(completed.Error);
 
                     continue;
                 }
 
+                Plugin.Logger.LogInfo("[Sprays] stage=upload.complete file=" + Path.GetFileName(completed.SourceFilePath)
+                    + " id=" + completed.SprayId + " bytes=" + completed.ImageBytes.Length);
                 for (int i = 0; callbacks != null && i < callbacks.Count; i++)
                 {
                     callbacks[i]?.Invoke(
@@ -188,8 +196,10 @@ namespace CatPatchspace
                 SourceFilePath = job.SourceFilePath
             };
 
+            string stage = "file.read";
             try
             {
+                Plugin.Logger.LogInfo("[Sprays] stage=file.read file=" + Path.GetFileName(job.SourceFilePath));
                 byte[] sourceBytes = File.ReadAllBytes(job.SourceFilePath);
 
                 completed.ImageBytes = sourceBytes;
@@ -197,6 +207,9 @@ namespace CatPatchspace
                 GarythecatSprayUploadResponse response;
                 string error;
 
+                stage = "upload.request";
+                Plugin.Logger.LogInfo("[Sprays] stage=upload.request file=" + Path.GetFileName(job.SourceFilePath)
+                    + " bytes=" + sourceBytes.Length + " gif=" + GifAnimationDecoder.IsGifBytes(sourceBytes));
                 if (GarythecatBackendClient.UploadSpray(sourceBytes, out response, out error))
                     completed.SprayId = response.spray_id;
                 else
@@ -204,7 +217,7 @@ namespace CatPatchspace
             }
             catch (Exception ex)
             {
-                completed.Error = ex.Message;
+                completed.Error = stage + ": " + ex.GetType().Name + ": " + ex.Message;
             }
 
             lock (_lock)

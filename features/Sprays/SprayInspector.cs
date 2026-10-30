@@ -309,7 +309,7 @@ namespace CatPatchspace
             if (!TryLoadGifAnimation(spray, out animation, out error))
             {
                 _failedGifCacheKeys.Add(cacheKey);
-                Plugin.Logger.LogWarning("Failed to load animated GIF preview: " + error);
+                Plugin.Logger.LogWarning("[Sprays] stage=inspect.decode id=" + spray.SprayId + " failed: " + error);
                 return false;
             }
 
@@ -320,6 +320,7 @@ namespace CatPatchspace
             }
 
             _gifAnimationCache[cacheKey] = animation;
+            Plugin.Logger.LogInfo("[Sprays] stage=inspect.decode id=" + spray.SprayId + " ok frames=" + animation.Frames.Length);
             return true;
         }
 
@@ -328,11 +329,11 @@ namespace CatPatchspace
             out GifAnimationData animation,
             out string error)
         {
-            if (IsLocalGifPath(spray.SourceFilePath))
-                return GifAnimationDecoder.TryLoadFromFile(spray.SourceFilePath, out animation, out error);
-
             if (GifAnimationDecoder.IsGifBytes(spray.ImageBytes))
                 return GifAnimationDecoder.TryLoad(spray.ImageBytes, out animation, out error);
+
+            if ((spray.ImageBytes == null || spray.ImageBytes.Length == 0) && IsLocalGifPath(spray.SourceFilePath))
+                return GifAnimationDecoder.TryLoadFromFile(spray.SourceFilePath, out animation, out error);
 
             animation = null;
             error = "Spray does not have local or downloaded GIF data.";
@@ -351,6 +352,13 @@ namespace CatPatchspace
             if (spray == null)
                 return "";
 
+            // Inspect the same bytes used by the wall sprite, including locally
+            // placed sprays. File extensions and later disk edits are not its format.
+            if (spray.ImageBytes != null && spray.ImageBytes.Length > 0)
+                return GifAnimationDecoder.IsGifBytes(spray.ImageBytes)
+                    ? "bytes|" + (spray.SprayId ?? "") + "|" + spray.ImageBytes.Length
+                    : "";
+
             string path = spray.SourceFilePath;
             if (IsLocalGifPath(path))
             {
@@ -363,9 +371,6 @@ namespace CatPatchspace
                     return "file|" + path;
                 }
             }
-
-            if (GifAnimationDecoder.IsGifBytes(spray.ImageBytes))
-                return "bytes|" + (spray.SprayId ?? "") + "|" + spray.ImageBytes.Length;
 
             return "";
         }

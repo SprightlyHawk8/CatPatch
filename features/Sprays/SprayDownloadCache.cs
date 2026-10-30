@@ -39,6 +39,7 @@ namespace CatPatchspace
             {
                 if (_cachedBytes.TryGetValue(sprayId, out cachedBytes))
                 {
+                    Plugin.Logger.LogInfo("[Sprays] stage=download.cache hit id=" + sprayId);
                     onReady(cachedBytes);
                     return;
                 }
@@ -58,6 +59,7 @@ namespace CatPatchspace
                 _downloadsInProgress.Add(sprayId);
             }
 
+            Plugin.Logger.LogInfo("[Sprays] stage=download.enqueue id=" + sprayId);
             ThreadPool.QueueUserWorkItem(_ => DownloadWorker(sprayId));
         }
 
@@ -91,11 +93,12 @@ namespace CatPatchspace
                 if (completed.ImageBytes == null || completed.ImageBytes.Length == 0)
                 {
                     Plugin.Logger.LogWarning(
-                        "Failed to download spray " + completed.SprayId + ": " + completed.Error);
+                        "[Sprays] stage=download.failed id=" + completed.SprayId + " error=" + completed.Error);
 
                     continue;
                 }
 
+                Plugin.Logger.LogInfo("[Sprays] stage=download.complete id=" + completed.SprayId + " bytes=" + completed.ImageBytes.Length);
                 for (int i = 0; callbacks != null && i < callbacks.Count; i++)
                     callbacks[i]?.Invoke(completed.ImageBytes);
             }

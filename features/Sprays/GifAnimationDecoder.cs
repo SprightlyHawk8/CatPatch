@@ -58,6 +58,7 @@ namespace CatPatchspace
                 return false;
             }
 
+            Texture2D[] frames = null;
             try
             {
                 using (MemoryStream input = new MemoryStream(gifBytes, false))
@@ -71,7 +72,7 @@ namespace CatPatchspace
                         return false;
                     }
 
-                    Texture2D[] frames = new Texture2D[frameCount];
+                    frames = new Texture2D[frameCount];
                     float[] durations = ReadFrameDurations(image, frameCount);
 
                     for (int i = 0; i < frameCount; i++)
@@ -92,6 +93,7 @@ namespace CatPatchspace
             }
             catch (Exception ex)
             {
+                DestroyTextures(frames);
                 error = UnwrapReflectionException(ex).Message;
                 return false;
             }
@@ -148,7 +150,9 @@ namespace CatPatchspace
             int height = GetProperty<int>(image, "Height");
 
             using (IDisposable bitmap = (IDisposable)Activator.CreateInstance(BitmapType, width, height))
-            using (IDisposable graphics = (IDisposable)InvokeStatic(GraphicsType, "FromImage", image))
+            // GIFs can be indexed. Draw into the non-indexed destination, then
+            // save that same bitmap; drawing into the source left output blank.
+            using (IDisposable graphics = (IDisposable)InvokeStatic(GraphicsType, "FromImage", bitmap))
             using (MemoryStream output = new MemoryStream())
             {
                 object transparent = ColorType.GetProperty("Transparent", BindingFlags.Public | BindingFlags.Static).GetValue(null, null);

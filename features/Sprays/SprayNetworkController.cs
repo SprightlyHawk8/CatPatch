@@ -92,7 +92,7 @@ namespace CatPatchspace
             sprayId = NormalizeSprayId(sprayId);
             if (!IsValidSprayId(sprayId))
             {
-                Plugin.Logger.LogWarning("Spray rejected before send: invalid spray id.");
+                Plugin.Logger.LogWarning("[Sprays] stage=network.send blocked: invalid spray ID");
                 return;
             }
 
@@ -105,7 +105,10 @@ namespace CatPatchspace
             }
 
             if (!CatPatchHostCompatibility.CanSendHostFeature("Public sprays"))
+            {
+                Plugin.Logger.LogWarning("[Sprays] stage=network.send id=" + sprayId + " blocked: host CatPatch compatibility not confirmed");
                 return;
+            }
 
             knetid localClientId = ScavPlayer.LocalPlayer != null ? ScavPlayer.LocalPlayer.playerId : new knetid(0);
             if (SpawnLocalSprayFromBestSource(sprayId, localImageBytes, position, localClientId, sourceFilePath))
@@ -124,9 +127,16 @@ namespace CatPatchspace
             };
 
             NetDataWriter writer = CreateSprayWriter(sprayId, position, 0UL);
-            Net.Client_Send(DeliveryMethod.ReliableUnordered, writer);
+            try { Net.Client_Send(DeliveryMethod.ReliableUnordered, writer); }
+            catch (Exception ex)
+            {
+                _pendingServerAcks.Remove(BuildSprayInstanceKey(sprayId, position));
+                Plugin.Logger.LogWarning("[Sprays] stage=network.send id=" + sprayId + " failed: " + ex);
+                HugController.ShowLocalMessage("Spray failed to send to host. See the log for details.");
+                return;
+            }
 
-            Plugin.Logger.LogInfo("Sent spray request to host: " + sprayId);
+            Plugin.Logger.LogInfo("[Sprays] stage=network.send id=" + sprayId + " position=" + position + " sent_to_host");
         }
 
         private static void OnServerSprayReceived(knetid senderClientId, ref NetDataReader reader)
@@ -145,7 +155,7 @@ namespace CatPatchspace
             {
                 int remainingSeconds = Mathf.CeilToInt((float)(nextAllowedAt - now));
                 _instance.SendSprayReject(senderClientId, sprayId, position, "Host spray cooldown: " + remainingSeconds + "s remaining.");
-                Plugin.Logger.LogInfo("Rejected spray from client " + senderClientId + " for host cooldown: " + remainingSeconds + "s remaining.");
+                Plugin.Logger.LogInfo("[Sprays] stage=network.reject id=" + sprayId + " client=" + senderClientId + " cooldown_remaining_s=" + remainingSeconds);
                 return;
             }
 
@@ -153,7 +163,7 @@ namespace CatPatchspace
             if (mutedSeconds > 0)
             {
                 _instance.SendSprayReject(senderClientId, sprayId, position, "Your sprays are muted by the host for " + mutedSeconds + "s.");
-                Plugin.Logger.LogInfo("Rejected muted spray from client " + senderClientId + ": " + mutedSeconds + "s remaining.");
+                Plugin.Logger.LogInfo("[Sprays] stage=network.reject id=" + sprayId + " client=" + senderClientId + " muted_remaining_s=" + mutedSeconds);
                 return;
             }
 
@@ -162,7 +172,7 @@ namespace CatPatchspace
             _instance.SendSprayServerAck(senderClientId, sprayId, position);
             _instance.BroadcastSprayToClients(senderClientId, sprayId, position);
 
-            Plugin.Logger.LogInfo("Host received and broadcast spray from client " + senderClientId + ": " + sprayId);
+            Plugin.Logger.LogInfo("[Sprays] stage=network.accept id=" + sprayId + " client=" + senderClientId);
         }
 
         private void BroadcastSprayToClients(knetid ownerClientId, string sprayId, Vector2 position)
@@ -170,7 +180,7 @@ namespace CatPatchspace
             IReadOnlyList<knetid> destinationClientIds = GetClientIdsExceptHost();
             if (destinationClientIds == null || destinationClientIds.Count == 0)
             {
-                Plugin.Logger.LogInfo("No remote clients available for spray broadcast.");
+                Plugin.Logger.LogInfo("[Sprays] stage=network.broadcast id=" + sprayId + " skipped: no remote clients");
                 return;
             }
 
@@ -184,16 +194,18 @@ namespace CatPatchspace
                 ExpectedClientIds = new HashSet<knetid>(destinationClientIds)
             };
 
-            Net.Server_SendToClients(
-                DeliveryMethod.ReliableUnordered,
-                writer,
-                destinationClientIds);
+            try { Net.Server_SendToClients(DeliveryMethod.ReliableUnordered, writer, destinationClientIds); }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning("[Sprays] stage=network.broadcast id=" + sprayId + " failed: " + ex);
+                return;
+            }
 
             if (pending.ExpectedClientIds.Count > 0)
                 _pendingClientAcks[sprayKey] = pending;
 
             Plugin.Logger.LogInfo(
-                "Broadcast spray " + sprayId + " to " + destinationClientIds.Count + " client(s).");
+                "[Sprays] stage=network.broadcast id=" + sprayId + " clients=" + destinationClientIds.Count);
         }
 
         private static void OnClientSprayReceived(knetid senderClientId, ref NetDataReader reader)
@@ -214,7 +226,7 @@ namespace CatPatchspace
 
             _instance.SpawnLocalSprayFromBackend(sprayId, position, ownerClientId);
 
-            Plugin.Logger.LogInfo("Client received spray spawn: " + sprayId);
+            Plugin.Logger.LogInfo("[Sprays] stage=network.receive id=" + sprayId + " owner=" + ownerClientId + " position=" + position);
         }
 
         private static void OnServerSprayClientAckReceived(knetid senderClientId, ref NetDataReader reader)
@@ -267,6 +279,8 @@ namespace CatPatchspace
                 string sprayId = NormalizeSprayId(reader.GetString());
                 Vector2 position = new Vector2(reader.GetFloat(), reader.GetFloat());
                 string message = reader.GetString();
+
+                Plugin.Logger.LogWarning("[Sprays] stage=network.reject id=" + sprayId + " position=" + position + " reason=" + message);
 
                 _instance.RemoveLocalSpray(sprayId, position);
                 _instance.HandleSprayServerAck(sprayId, position);
@@ -332,7 +346,10 @@ namespace CatPatchspace
             {
                 sprayId = NormalizeSprayId(reader.GetString());
                 if (!IsValidSprayId(sprayId))
+                {
+                    Plugin.Logger.LogWarning("[Sprays] stage=network.decode failed: invalid spray ID");
                     return false;
+                }
 
                 float x = reader.GetFloat();
                 float y = reader.GetFloat();
@@ -345,7 +362,7 @@ namespace CatPatchspace
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning("Failed to read spray packet: " + ex.Message);
+                Plugin.Logger.LogWarning("[Sprays] stage=network.decode failed: " + ex.GetType().Name + ": " + ex.Message);
                 return false;
             }
         }
@@ -369,7 +386,10 @@ namespace CatPatchspace
         private void SpawnLocalSprayFromBackend(string sprayId, Vector2 position, ulong ownerClientId)
         {
             if (!CatPatchClientSettings.ShowSprays)
+            {
+                Plugin.Logger.LogInfo("[Sprays] stage=download.skip id=" + sprayId + " reason=ShowSprays_disabled");
                 return;
+            }
 
             int layerGeneration = _layerGeneration;
             _downloadCache.GetOrRequest(
@@ -377,7 +397,10 @@ namespace CatPatchspace
                 imageBytes =>
                 {
                     if (layerGeneration != _layerGeneration)
+                    {
+                        Plugin.Logger.LogInfo("[Sprays] stage=render.skip id=" + sprayId + " reason=layer_changed_during_download");
                         return;
+                    }
 
                     SpawnLocalSpray(sprayId, imageBytes, position, ownerClientId, "");
                 });
@@ -386,7 +409,10 @@ namespace CatPatchspace
         private bool SpawnLocalSpray(string sprayId, byte[] imageBytes, Vector2 position, ulong ownerClientId, string sourceFilePath = "")
         {
             if (!CatPatchClientSettings.ShowSprays)
+            {
+                Plugin.Logger.LogInfo("[Sprays] stage=render.skip id=" + sprayId + " reason=ShowSprays_disabled");
                 return false;
+            }
 
             GameObject sprayObject;
             string error;
@@ -399,7 +425,7 @@ namespace CatPatchspace
                     out sprayObject,
                     out error))
             {
-                Plugin.Logger.LogWarning("Failed to spawn spray: " + error);
+                Plugin.Logger.LogWarning("[Sprays] stage=render.decode id=" + sprayId + " bytes=" + imageBytes?.Length + " failed: " + error);
                 return false;
             }
 
@@ -410,6 +436,7 @@ namespace CatPatchspace
                 instance.SourceFilePath = sourceFilePath ?? "";
             }
 
+            Plugin.Logger.LogInfo("[Sprays] stage=render.complete id=" + sprayId + " owner=" + ownerClientId + " position=" + position);
             return true;
         }
 
@@ -446,7 +473,7 @@ namespace CatPatchspace
                 return false;
 
             _localClientSprayKeys.Remove(key);
-            Plugin.Logger.LogInfo("Ignored echoed spray spawn already placed locally: " + sprayId);
+            Plugin.Logger.LogInfo("[Sprays] stage=network.echo id=" + sprayId + " skipped: already placed locally");
             return true;
         }
 
@@ -496,7 +523,12 @@ namespace CatPatchspace
             if (ownerClientId != null)
                 writer.Put(ownerClientId.Value);
 
-            Net.Server_SendToClients(DeliveryMethod.ReliableUnordered, writer, destinationClientIds);
+            try { Net.Server_SendToClients(DeliveryMethod.ReliableUnordered, writer, destinationClientIds); }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogWarning("[Sprays] stage=network.clear failed: " + ex);
+                return;
+            }
         }
 
         private void SendSprayClientAck(string sprayId, Vector2 position)
@@ -510,12 +542,14 @@ namespace CatPatchspace
 
         private void HandleSprayServerAck(string sprayId, Vector2 position)
         {
+            Plugin.Logger.LogInfo("[Sprays] stage=network.host_ack id=" + sprayId + " position=" + position + " (receipt only; see download/render stages)");
             CatPatchHostCompatibility.MarkHostResponded();
             _pendingServerAcks.Remove(BuildSprayInstanceKey(sprayId, position));
         }
 
         private void HandleSprayClientAck(knetid senderClientId, string sprayId, Vector2 position)
         {
+            Plugin.Logger.LogInfo("[Sprays] stage=network.client_ack id=" + sprayId + " client=" + senderClientId + " (receipt only; see peer download/render stages)");
             PendingClientSprayAcks pending;
             if (!_pendingClientAcks.TryGetValue(BuildSprayInstanceKey(sprayId, position), out pending))
                 return;
@@ -554,6 +588,7 @@ namespace CatPatchspace
 
             for (int i = 0; i < expiredServerAcks.Count; i++)
             {
+                Plugin.Logger.LogWarning("[Sprays] stage=network.host_ack timeout key=" + expiredServerAcks[i] + " timeout_s=" + ServerAckTimeoutSeconds);
                 _pendingServerAcks.Remove(expiredServerAcks[i]);
                 CatPatchHostCompatibility.MarkHostMissing("Public sprays");
             }
@@ -567,7 +602,11 @@ namespace CatPatchspace
 
                 expiredClientAcks.Add(pair.Key);
                 if (pending.ExpectedClientIds != null && pending.ExpectedClientIds.Count > 0)
+                {
+                    Plugin.Logger.LogWarning("[Sprays] stage=network.client_ack timeout id=" + pending.SprayId
+                        + " missing_clients=" + string.Join(",", pending.ExpectedClientIds) + " timeout_s=" + ClientAckTimeoutSeconds);
                     SendSprayAlert(pending.OwnerClientId, "Some clients did not acknowledge your spray. They may not have CatPatch installed or updated.");
+                }
             }
 
             for (int i = 0; i < expiredClientAcks.Count; i++)

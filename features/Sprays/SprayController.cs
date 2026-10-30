@@ -17,6 +17,7 @@ namespace CatPatchspace
 
         private readonly SprayVisualController _visualController = new SprayVisualController();
         private readonly Dictionary<string, Texture2D> _previewTextureCache = new Dictionary<string, Texture2D>();
+        private readonly HashSet<string> _failedPreviewKeys = new HashSet<string>();
         private readonly SprayUploadQueue _uploadQueue = new SprayUploadQueue();
         private SprayNetworkController _networkController;
 
@@ -51,36 +52,55 @@ namespace CatPatchspace
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
                 return false;
 
-            if (_previewTextureCache.TryGetValue(path, out texture) && texture != null)
+            // Retry a failed file only after it changes, rather than logging every GUI pass.
+            string cacheKey = path + "|" + File.GetLastWriteTimeUtc(path).Ticks;
+            if (_failedPreviewKeys.Contains(cacheKey))
+                return false;
+            if (_previewTextureCache.TryGetValue(cacheKey, out texture) && texture != null)
                 return true;
 
-            byte[] bytes = File.ReadAllBytes(path);
-
-            Texture2D loadedTexture;
-
-            if (string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                string error;
-                if (!GifAnimationDecoder.TryCreateFirstFrameTexture(bytes, out loadedTexture, out error))
+                byte[] bytes = File.ReadAllBytes(path);
+
+                Texture2D loadedTexture;
+
+                if (GifAnimationDecoder.IsGifBytes(bytes))
                 {
-                    Plugin.Logger.LogWarning("Failed to load GIF radial preview: " + error);
+                    string error;
+                    if (!GifAnimationDecoder.TryCreateFirstFrameTexture(bytes, out loadedTexture, out error))
+                    {
+                        _failedPreviewKeys.Add(cacheKey);
+                        Plugin.Logger.LogWarning("[Sprays] stage=selector.decode file=" + Path.GetFileName(path) + " failed: " + error);
+                        return false;
+                    }
+                }
+                else
+                {
+                    loadedTexture = CreateStaticTexture(bytes);
+                }
+
+                if (loadedTexture == null)
+                {
+                    _failedPreviewKeys.Add(cacheKey);
+                    Plugin.Logger.LogWarning("[Sprays] stage=selector.decode file=" + Path.GetFileName(path) + " failed: unsupported or corrupt image");
                     return false;
                 }
+
+                loadedTexture.wrapMode = TextureWrapMode.Clamp;
+                loadedTexture.filterMode = FilterMode.Bilinear;
+
+                _previewTextureCache[cacheKey] = loadedTexture;
+                Plugin.Logger.LogInfo("[Sprays] stage=selector.decode file=" + Path.GetFileName(path) + " ok size=" + loadedTexture.width + "x" + loadedTexture.height);
+                texture = loadedTexture;
+                return true;
             }
-            else
+            catch (Exception ex)
             {
-                loadedTexture = CreateStaticTexture(bytes);
-            }
-
-            if (loadedTexture == null)
+                _failedPreviewKeys.Add(cacheKey);
+                Plugin.Logger.LogWarning("[Sprays] stage=selector.read file=" + Path.GetFileName(path) + " failed: " + ex.GetType().Name + ": " + ex.Message);
                 return false;
-
-            loadedTexture.wrapMode = TextureWrapMode.Clamp;
-            loadedTexture.filterMode = FilterMode.Bilinear;
-
-            _previewTextureCache[path] = loadedTexture;
-            texture = loadedTexture;
-            return true;
+            }
         }
 
 
@@ -156,7 +176,16 @@ namespace CatPatchspace
                 return;
 
             if (_radialOpen)
-                DrawRadialMenu();
+            {
+                Matrix4x4 previous = GUI.matrix;
+                try
+                {
+                    float scale = GetRadialScale();
+                    GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+                    DrawRadialMenu();
+                }
+                finally { GUI.matrix = previous; }
+            }
 
             DrawCooldownPopup();
         }
@@ -232,7 +261,7 @@ namespace CatPatchspace
             {
                 int remainingSeconds = Mathf.CeilToInt((float)(_nextAllowedSprayAt - now));
                 ShowCooldownPopup(remainingSeconds);
-                Plugin.Logger.LogInfo("Spray is on cooldown: " + remainingSeconds + "s remaining.");
+                Plugin.Logger.LogInfo("[Sprays] stage=placement blocked: cooldown remaining_s=" + remainingSeconds);
                 return;
             }
 
@@ -240,13 +269,19 @@ namespace CatPatchspace
 
             if (!File.Exists(sprayPath))
             {
-                Plugin.Logger.LogWarning("No spray found at: " + sprayPath);
+                Plugin.Logger.LogWarning("[Sprays] stage=placement failed: source file missing " + sprayPath);
                 return;
             }
 
             Vector2 position;
             if (!TryGetWorldPosition(screenPosition, out position))
+            {
+                Plugin.Logger.LogWarning("[Sprays] stage=placement failed: main camera unavailable");
                 return;
+            }
+
+            Plugin.Logger.LogInfo("[Sprays] stage=placement file=" + Path.GetFileName(sprayPath) + " position=" + position);
+            string layerKey = _lastSprayLayerKey;
 
             if (_soundPlayer != null) _soundPlayer.PlaySprayRequestSound();
 
@@ -258,6 +293,11 @@ namespace CatPatchspace
                 sprayPath,
                 (sprayId, imageBytes, sourceFilePath) =>
                 {
+                    if (layerKey != _lastSprayLayerKey)
+                    {
+                        Plugin.Logger.LogInfo("[Sprays] stage=placement.cancel id=" + sprayId + " reason=layer_changed_during_upload");
+                        return;
+                    }
                     _networkController.SendOrSpawnSpray(
                         sprayId,
                         imageBytes,
@@ -440,6 +480,7 @@ namespace CatPatchspace
             }
 
             _previewTextureCache.Clear();
+            _failedPreviewKeys.Clear();
         }
         private void ClampRadialPage()
         {
@@ -476,7 +517,7 @@ namespace CatPatchspace
 
             ClampRadialPage();
 
-            Vector2 center = ToGuiPoint(_sprayAnchorScreen);
+            Vector2 center = GetRadialCenter();
             List<string> page = GetRadialPage(files, _radialPage);
 
             GUI.Box(
@@ -526,8 +567,8 @@ namespace CatPatchspace
             ClampRadialPage();
 
             List<string> page = GetRadialPage(files, _radialPage);
-            Vector2 center = ToGuiPoint(_sprayAnchorScreen);
-            Vector2 mouse = ToGuiPoint(Input.mousePosition);
+            Vector2 center = GetRadialCenter();
+            Vector2 mouse = ToGuiPoint(Input.mousePosition) / GetRadialScale();
 
             for (int i = 0; i < page.Count; i++)
             {
@@ -544,13 +585,38 @@ namespace CatPatchspace
         private static Rect GetRadialRect(Vector2 center, int index, int count)
         {
             float angle = ((float)index / Mathf.Max(1f, count) * 360f - 90f) * Mathf.Deg2Rad;
-            Vector2 offset = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 80f;
+            Vector2 offset = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * 175f;
 
             return new Rect(
-                center.x + offset.x - 35f,
-                center.y + offset.y - 20f,
-                70f,
-                40f);
+                center.x + offset.x - 70f,
+                center.y + offset.y - 45f,
+                140f,
+                90f);
+        }
+
+        private static float GetRadialScale()
+        {
+            return CalculateRadialScale(Screen.width, Screen.height, Screen.dpi, CatPatchClientSettings.SprayMenuScale);
+        }
+
+        internal static float CalculateRadialScale(int width, int height, float dpi, float preference)
+        {
+            // Logical sizes use display density, not a fraction of the resolution.
+            float dpiScale = dpi > 0f ? Mathf.Clamp(dpi / 96f, 1f, 3f) : 1f;
+            float desired = dpiScale * preference;
+            return Mathf.Max(0.1f, Mathf.Min(desired, Mathf.Min(width / 510f, height / 460f)));
+        }
+
+        private Vector2 GetRadialCenter()
+        {
+            float scale = GetRadialScale();
+            return CalculateRadialCenter(ToGuiPoint(_sprayAnchorScreen) / scale, Screen.width, Screen.height, scale);
+        }
+
+        internal static Vector2 CalculateRadialCenter(Vector2 center, int width, int height, float scale)
+        {
+            return new Vector2(Mathf.Clamp(center.x, 255f, width / scale - 255f),
+                Mathf.Clamp(center.y, 230f, height / scale - 230f));
         }
 
         private static Vector2 ToGuiPoint(Vector2 screenPoint)

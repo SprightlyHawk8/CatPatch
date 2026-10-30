@@ -154,6 +154,11 @@ namespace CatPatchspace
             if (newShowSprays != showSprays)
                 CatPatchClientSettings.ShowSprays = newShowSprays;
 
+            GUILayout.Label("Spray selector size: " + CatPatchClientSettings.SprayMenuScale.ToString("0.00") + "x", labelStyle);
+            float sprayMenuScale = GUILayout.HorizontalSlider(CatPatchClientSettings.SprayMenuScale, 0.75f, 3f);
+            if (Mathf.Abs(sprayMenuScale - CatPatchClientSettings.SprayMenuScale) > 0.01f)
+                CatPatchClientSettings.SprayMenuScale = sprayMenuScale;
+
             DrawUpdaterControls(labelStyle, buttonStyle);
 
             GUILayout.Space(12f);

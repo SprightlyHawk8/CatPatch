@@ -10,7 +10,7 @@ namespace CatPatchspace
             FrameDurations = frameDurations;
 
             for (int i = 0; i < frameDurations.Length; i++)
-                TotalDuration += Mathf.Max(GifAnimationDecoder.FallbackFrameDurationSeconds, frameDurations[i]);
+                TotalDuration += Mathf.Max(0.01f, frameDurations[i]);
         }
 
         public Texture2D[] Frames { get; }
@@ -32,9 +32,9 @@ namespace CatPatchspace
 
             for (int i = 0; i < Frames.Length; i++)
             {
-                cursor += Mathf.Max(GifAnimationDecoder.FallbackFrameDurationSeconds, FrameDurations[i]);
+                cursor += Mathf.Max(0.01f, FrameDurations[i]);
 
-                if (time <= cursor)
+                if (time < cursor)
                     return Frames[i];
             }
 
