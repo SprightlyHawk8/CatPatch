@@ -50,7 +50,7 @@ namespace CatPatchspace
         public const string OldChallengeStarterKitItems = "bandage,tourniquet,splint,waterbottle,flashlight,flimsyknife";
         public const string ShortChallengeStarterKitItems = "medkit,combatpen,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,tourniquet,chestdrain,belt,pistol,headlamp";
         public const string DefaultChallengeStarterKitItems =
-            "medkit,combatpen,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,tourniquet,chestdrain,belt,pistol,headlamp";
+            "medkit,combatpen,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,medicalsuture,tourniquet,chestdrain,belt,pistol,lantern,riothelmet";
 
         public static readonly string[] ChallengeTrapIds = MfcHazardCatalog.AllHazardIds;
 

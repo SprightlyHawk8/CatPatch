@@ -63,8 +63,11 @@ guarantee against every game crash.
 
 Sprays use the backend normally, with a lobby-host backup for connection failures.
 In **CP → Client Preferences**, enable **Show sprays** and **Send sprays over
-Steam fallback** to share backup copies of your images with the host. A successful
-backend upload places normally while its backup transfers in the background.
+Steam fallback** to share backup copies of your images with the host. This
+personal sending option defaults to **off**; existing saved choices are retained.
+The host's separate **Lobby spray fallback** relay defaults to **on** and can
+serve other players even when the host's personal sending option is off.
+A successful backend upload places normally while its backup transfers in the background.
 If the upload fails, placement waits for the host to accept the image instead.
 Downloads try the local cache, then the backend, then the lobby host; images that
 exist only in the lobby skip the backend. Receiving a backup does not require

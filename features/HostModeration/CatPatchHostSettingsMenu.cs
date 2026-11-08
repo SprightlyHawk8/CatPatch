@@ -210,7 +210,7 @@ namespace CatPatchspace
             if (newClearCache != clearCache)
                 CatPatchClientSettings.ClearSprayFallbackCacheOnStartup = newClearCache;
             GUI.enabled = previousEnabled;
-            GUILayout.Label("Shares a backup through the lobby host if the spray backend fails.", labelStyle);
+            GUILayout.Label("If a player cannot connect to Gary's backend, spray can be sent through steam if this is enabled. Stores fallback sprays locally in same directory as the local sprays. Enable clear cache if you don't want to save others sprays. Disabled by default bc im not a cyber security expert.\n\nThank you Voxeles for this", labelStyle);
 
             GUILayout.Label("Spray selector size: " + CatPatchClientSettings.SprayMenuScale.ToString("0.00") + "x", labelStyle);
             float sprayMenuScale = GUILayout.HorizontalSlider(CatPatchClientSettings.SprayMenuScale, 0.75f, 3f);
