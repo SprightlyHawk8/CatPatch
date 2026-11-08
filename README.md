@@ -5,7 +5,11 @@ This is the active CatPatch project and the target for new work.
 - Multiplayer target: `CasualtiesMP` / Together
 - Target framework: .NET Standard 2.1
 - Namespace: `CatPatchspace`
-- Host-transfer: Complete Ass probably
+- Version: `1.1.0`
+
+Host transfer has been removed from the DLL and host moderation menu. Its
+unfinished implementation is retained in [archive/HostTransfer](archive/HostTransfer/README.txt)
+for reference and is excluded from compilation.
 
 ## Building from source
 
@@ -18,7 +22,99 @@ multiplayer DLLs. A successful build copies `CatPatch.dll` into the game folder
 set by `BaseGamePath`. Set `SteamPluginDir` only if you also want it copied to a
 second game installation for testing purposes.
 
+## Menu input
+
+Click the **CatPatch** button again to close CP settings. Both settings and the
+updater capture input only over their rectangles; outside buttons remain usable.
+The bug-report typing fix remains active. The extra Close control and custom
+Escape handler have been removed.
+
+The update-available popup uses the original IMGUI layout and buttons, isolated
+from Together's multiplayer skin. Like the old CatPatch IMGUI menus, it captures
+input over its window rectangle and blocks underlying buttons there. It does not
+lock movement or disable the rest of the screen while waiting for a response.
+Clicks outside the updater remain available; its closing click stays captured
+over the old window rectangle through the following frame.
+
+Main-menu buttons also poll raw mouse input in `AdaptiveButton.Update`, bypassing
+IMGUI events and Canvas raycasts. CatPatch patches the actual `overlayActive`
+property getter and guards `AdaptiveButton.Clicked` before any menu action runs.
+These checks use live screen mouse coordinates and the windows' current bounds,
+including after dragging, rather than a stale or window-local IMGUI event position.
+
+The temporary menu click-tracing and startup hook-audit logs have been removed
+for 1.1.0. The input guards remain active.
+
+CatPatch shortcuts also pause while Together's multiplayer/pause menu is open,
+including its bug-report editor, while chat is focused, or while typing in a Unity
+text field. Opening a menu cancels a held spray selector or emote wheel, so releasing
+the key after closing the menu does not place a spray. Console/crafting guards remain.
+
 ## Sprays and troubleshooting
+
+Sprays accept PNG, JPEG and GIF contents up to **20,000,000 bytes (20 MB)**, with
+width and height each **below 4096 pixels**. GIFs also have a 256-frame limit and
+a 64 MiB decoded RGBA-frame budget. These checks apply to both backend and lobby
+images before native decoding; filenames do not determine the format. Unsupported
+formats, appended data, APNG and compressed PNG metadata are rejected.
+The [security review](SECURITY_REVIEW.txt) describes the protections and remaining
+native-decoder/transport risks; these limits are not a malware scanner or a
+guarantee against every game crash.
+
+Sprays use the backend normally, with a lobby-host backup for connection failures.
+In **CP → Client Preferences**, enable **Show sprays** and **Send sprays over
+Steam fallback** to share backup copies of your images with the host. A successful
+backend upload places normally while its backup transfers in the background.
+If the upload fails, placement waits for the host to accept the image instead.
+Downloads try the local cache, then the backend, then the lobby host; images that
+exist only in the lobby skip the backend. Receiving a backup does not require
+enabling your own outgoing backup uploads.
+
+Turning **Show sprays** off also switches **Send sprays over Steam fallback** off,
+saves that choice, and cancels active personal transfers. Turning sprays back on
+leaves sending off until you enable it again. The host can still relay other
+players' images while hiding sprays locally. Hosts control that separately under
+**Host Moderation → Sprays → Lobby spray fallback**.
+
+The host and players using the backup need this updated CatPatch. Normal backend
+sprays retain their existing IDs; older versions cannot display lobby-only images.
+The hardened fallback uses protocol 2 and does not negotiate with protocol-1 peers.
+Backend-ID uploads must match the host's verified cache or an authoritative backend
+download. If the host cannot verify a normal ID, that backup is rejected; ordinary
+backend placement still works. Content-hashed lobby-only images do not require the
+host to reach the backend. Conflicting content cannot replace an existing ID.
+Existing placement cooldowns, mutes and clear commands apply to both delivery paths.
+The backup uses Together's lobby transport (Steam in Steam lobbies), with bounded
+fragments, checksums, retries and session cleanup. No host-transfer support is added.
+
+Host config: `AllowSprayFallback` defaults to true; `MaxSprayFallbackMiB` defaults
+to 20 (range 1–20), with a non-negotiable cap of 20,000,000 bytes. Existing lower
+host settings remain lower. The byte cache uses at most 64 MiB in memory and 256 MiB on disk
+under `BepInEx/config/Cat-Patch/SprayFallbackCache`, with oldest entries evicted.
+A lobby-only image is unavailable if the host no longer has its cached copy.
+Peers can request only images placed in the current layer, with at most 256 IDs
+remembered. Requests never make the host fetch arbitrary backend IDs. Per-peer and
+global transfer/request quotas bound repeated offers, cancellations and packet work.
+The renderer retains at most 128 wall sprays and 128 cached textures, with separate
+encoded-byte and pixel budgets. Clear sprays or change layers to reclaim the wall
+cache. The inspector retains only one decoded GIF at a time.
+
+**Clear spray fallback cache on startup** defaults to on when **Show sprays** is
+enabled. On the next game launch, this clears previous downloaded backup images
+from `SprayFallbackCache` before opening the cache. Your original spray library
+is untouched. Turn this option off to retain downloads across launches. Its saved
+choice is retained when hiding/showing sprays; startup cleanup does not run when
+Show sprays is off. Changes to this option apply on the next launch.
+On upgrade, files from the old unauthenticated cache format are discarded once,
+even when startup cleanup is disabled. New cache files have a `v2-` prefix.
+
+Logs use `[Sprays] stage=fallback.*`, `upload.backend_failed`,
+`download.backend_failed` and `download.fallback` to distinguish backend failures,
+host negotiation, backup storage and delivery. A successful background seed means
+the host accepted bytes; it does not prove every player displayed the image.
+Run the simulated transport checks with
+`dotnet run --project tests/SprayFallback/Checks.csproj`; see that folder's README
+for the remaining live multiplayer checks.
 
 Hold the spray key (default `G`) to choose a file, then release to place it.
 Inspect a wall spray with `I` to play its GIF animation. The selector and

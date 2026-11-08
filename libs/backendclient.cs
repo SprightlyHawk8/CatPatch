@@ -17,7 +17,8 @@ namespace CatPatchspace
 
         private static readonly HttpClient Http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(10.0)
+            Timeout = TimeSpan.FromSeconds(10.0),
+            MaxResponseContentBufferSize = 1024 * 1024 // JSON/error replies, not streamed image bodies.
         };
 
         internal static bool UploadSpray(
@@ -25,6 +26,11 @@ namespace CatPatchspace
             out GarythecatSprayUploadResponse response,
             out string error)
         {
+            if (!SprayImageSafety.TryValidate(imageBytes, out _, out error))
+            {
+                response = null;
+                return false;
+            }
             GarythecatSprayUploadRequest payload = new GarythecatSprayUploadRequest
             {
                 png_base64 = Convert.ToBase64String(imageBytes ?? Array.Empty<byte>())
@@ -150,16 +156,23 @@ namespace CatPatchspace
 
             try
             {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 using (HttpRequestMessage request = new HttpRequestMessage(method, BuildUrl(path)))
                 {
                     LogRequest(requestId, stage, method, path, timer, "started timeout_s=10");
-                    using (HttpResponseMessage result = Http.SendAsync(request).GetAwaiter().GetResult())
+                    using (HttpResponseMessage result = Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).GetAwaiter().GetResult())
                     {
                         stage = "http.read";
                         LogRequest(requestId, stage, method, path, timer, "status=" + (int)result.StatusCode);
-                        byte[] bytes = result.Content == null
-                            ? Array.Empty<byte>()
-                            : result.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                        int limit = result.IsSuccessStatusCode ? SprayImageSafety.MaxBytes : 65536;
+                        if (result.Content?.Headers.ContentLength > limit)
+                            throw new InvalidDataException("Backend response exceeds the spray size limit.");
+                        byte[] bytes = Array.Empty<byte>();
+                        if (result.Content != null)
+                        {
+                            using var stream = result.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                            bytes = ReadBounded(stream, limit, deadline.Token);
+                        }
 
                         if (!result.IsSuccessStatusCode)
                         {
@@ -171,6 +184,7 @@ namespace CatPatchspace
 
                         if (bytes == null || bytes.Length == 0)
                             throw new InvalidDataException("empty_image_response");
+                        SprayImageSafety.Validate(bytes);
                         response = bytes;
                         LogRequest(requestId, "complete", method, path, timer,
                             "ok bytes=" + bytes.Length + " content_type=" + result.Content?.Headers.ContentType);
@@ -187,6 +201,19 @@ namespace CatPatchspace
                 error = stage + ": " + error;
 
                 return false;
+            }
+        }
+
+        internal static byte[] ReadBounded(Stream stream, int limit, CancellationToken token)
+        {
+            using var output = new MemoryStream();
+            var buffer = new byte[65536];
+            while (true)
+            {
+                int read = stream.ReadAsync(buffer, 0, (int)Math.Min(buffer.Length, limit - output.Length + 1), token).GetAwaiter().GetResult();
+                if (read == 0) return output.ToArray();
+                if (output.Length + read > limit) throw new InvalidDataException("Backend response exceeds the spray size limit.");
+                output.Write(buffer, 0, read);
             }
         }
 

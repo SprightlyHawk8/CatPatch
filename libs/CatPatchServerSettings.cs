@@ -10,6 +10,17 @@ namespace CatPatchspace
     internal static class CatPatchServerSettings
     {
         private static ConfigEntry<float> _sprayCooldownSeconds;
+        private static ConfigEntry<bool> _allowSprayFallback;
+        private static ConfigEntry<int> _maxSprayFallbackMiB;
+
+        public static bool AllowSprayFallback
+        {
+            get { return _allowSprayFallback == null || _allowSprayFallback.Value; }
+            set { if (_allowSprayFallback != null) _allowSprayFallback.Value = value; }
+        }
+
+        public static int MaxSprayFallbackBytes => System.Math.Min(SprayImageSafety.MaxBytes,
+            System.Math.Min(20, System.Math.Max(1, _maxSprayFallbackMiB?.Value ?? 20)) * 1024 * 1024);
         private static ConfigEntry<bool> _dogpileEnabled;
         private static ConfigEntry<float> _dogpileRadius;
         private static ConfigEntry<bool> _piggybackThrowEnabled;
@@ -373,6 +384,11 @@ namespace CatPatchspace
 
         public static void Bind(ConfigFile config)
         {
+            _allowSprayFallback = config.Bind("Server Settings", "AllowSprayFallback", true,
+                "Allow bounded spray-image transfers through this lobby host, independently of the host's local ShowSprays preference.");
+            _maxSprayFallbackMiB = config.Bind("Server Settings", "MaxSprayFallbackMiB", 20,
+                new ConfigDescription("Maximum transfer size in MiB, always capped at 20,000,000 bytes (20 MB).",
+                    new AcceptableValueRange<int>(1, 20)));
             _sprayCooldownSeconds = config.Bind(
                 "Server Settings",
                 "SprayCooldownSeconds",

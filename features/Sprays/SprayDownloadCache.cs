@@ -29,6 +29,11 @@ namespace CatPatchspace
 
         public void GetOrRequest(string sprayId, Action<byte[]> onReady)
         {
+            if (SprayFallback.NetworkController.Instance != null)
+            {
+                SprayFallback.NetworkController.Instance.Service.Download(sprayId, onReady);
+                return;
+            }
             if (string.IsNullOrWhiteSpace(sprayId) || onReady == null)
                 return;
 

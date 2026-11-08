@@ -305,6 +305,10 @@ namespace CatPatchspace
             if (_gifAnimationCache.TryGetValue(cacheKey, out animation))
                 return animation != null && animation.IsValid;
 
+            // Retain at most one decoded animation, rather than accumulating
+            // every GIF ever inspected during this game session.
+            foreach (var previous in _gifAnimationCache.Values) previous?.DestroyTextures();
+            _gifAnimationCache.Clear();
             string error;
             if (!TryLoadGifAnimation(spray, out animation, out error))
             {

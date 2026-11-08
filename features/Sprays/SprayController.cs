@@ -17,6 +17,7 @@ namespace CatPatchspace
 
         private readonly SprayVisualController _visualController = new SprayVisualController();
         private readonly Dictionary<string, Texture2D> _previewTextureCache = new Dictionary<string, Texture2D>();
+        private long _previewPixelBytes;
         private readonly HashSet<string> _failedPreviewKeys = new HashSet<string>();
         private readonly SprayUploadQueue _uploadQueue = new SprayUploadQueue();
         private SprayNetworkController _networkController;
@@ -35,15 +36,18 @@ namespace CatPatchspace
 
         private static Texture2D CreateStaticTexture(byte[] bytes)
         {
+            var info = SprayImageSafety.Validate(bytes);
             Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-
-            if (!ImageConversion.LoadImage(texture, bytes))
+            try
             {
-                Destroy(texture);
-                return null;
+                if (!ImageConversion.LoadImage(texture, bytes) || texture.width != info.Width || texture.height != info.Height)
+                {
+                    Destroy(texture);
+                    return null;
+                }
+                return texture;
             }
-
-            return texture;
+            catch { Destroy(texture); throw; }
         }
         private bool TryGetPreviewTexture(string path, out Texture2D texture)
         {
@@ -61,7 +65,10 @@ namespace CatPatchspace
 
             try
             {
-                byte[] bytes = File.ReadAllBytes(path);
+                byte[] bytes = SprayImageSafety.ReadFile(path);
+                var safeInfo = SprayImageSafety.Validate(bytes);
+                if (_previewTextureCache.Count >= 64 || _previewPixelBytes + safeInfo.FrameBytes > 64L * 1024 * 1024)
+                    return false;
 
                 Texture2D loadedTexture;
 
@@ -91,6 +98,7 @@ namespace CatPatchspace
                 loadedTexture.filterMode = FilterMode.Bilinear;
 
                 _previewTextureCache[cacheKey] = loadedTexture;
+                _previewPixelBytes += safeInfo.FrameBytes;
                 Plugin.Logger.LogInfo("[Sprays] stage=selector.decode file=" + Path.GetFileName(path) + " ok size=" + loadedTexture.width + "x" + loadedTexture.height);
                 texture = loadedTexture;
                 return true;
@@ -473,6 +481,7 @@ namespace CatPatchspace
 
         private void OnDestroy()
         {
+            _visualController.ClearActiveSprays();
             foreach (Texture2D texture in _previewTextureCache.Values)
             {
                 if (texture != null)

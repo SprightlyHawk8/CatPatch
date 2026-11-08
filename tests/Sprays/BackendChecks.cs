@@ -47,7 +47,7 @@ internal static class BackendChecks
             GarythecatSprayUploadResponse result;
             string error;
             byte[] bytes;
-            byte[] input = { 71, 73, 70, 56, 57, 97 };
+            byte[] input = Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
             fake.Respond = () => Reply(HttpStatusCode.OK, "{\"spray_id\":\"abcdef\"}");
             check(GarythecatBackendClient.UploadSpray(input, out result, out error) && result.spray_id == "abcdef"
                 && fake.Body.Contains(Convert.ToBase64String(input)), "backend upload preserves GIF bytes in existing contract");
@@ -58,8 +58,29 @@ internal static class BackendChecks
                 fake.Respond = () => Reply(HttpStatusCode.OK, body);
                 check(!GarythecatBackendClient.UploadSpray(input, out result, out error) && !string.IsNullOrEmpty(error), "backend invalid success body rejected: " + body);
             }
-            fake.Respond = () => Reply(HttpStatusCode.OK, "GIF89a");
-            check(GarythecatBackendClient.DownloadSpray("abcdef", out bytes, out error) && bytes.Length == 6, "backend download returns original bytes");
+            fake.Respond = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(input) };
+            check(GarythecatBackendClient.DownloadSpray("abcdef", out bytes, out error) && bytes.Length == input.Length, "backend download returns validated original bytes");
+            fake.Respond = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[SprayImageSafety.MaxBytes + 1]) };
+            check(!GarythecatBackendClient.DownloadSpray("abcdef", out bytes, out error) && error.Contains("size limit"), "oversized HTTP image rejected before buffering body");
+            fake.Respond = () => Reply(HttpStatusCode.OK, "MZ executable is not an image");
+            check(!GarythecatBackendClient.DownloadSpray("abcdef", out bytes, out error), "backend executable contents rejected");
+            using (var stream = new System.IO.MemoryStream(new byte[1025]))
+            {
+                bool blocked = false;
+                try { GarythecatBackendClient.ReadBounded(stream, 1024, CancellationToken.None); }
+                catch (System.IO.InvalidDataException) { blocked = true; }
+                check(blocked && stream.Position == 1025, "stream reader stops at limit plus one when length is unknown");
+            }
+            using (var stream = new System.IO.MemoryStream(new byte[1024]))
+                check(GarythecatBackendClient.ReadBounded(stream, 1024, CancellationToken.None).Length == 1024, "stream reader accepts exact byte boundary");
+            using (var stream = new System.IO.MemoryStream(new byte[1024]))
+            using (var canceled = new CancellationTokenSource())
+            {
+                canceled.Cancel(); bool stopped = false;
+                try { GarythecatBackendClient.ReadBounded(stream, 1024, canceled.Token); }
+                catch (OperationCanceledException) { stopped = true; }
+                check(stopped, "stream body reads honor deadline cancellation");
+            }
             fake.Respond = () => Reply(HttpStatusCode.OK, "");
             check(!GarythecatBackendClient.DownloadSpray("abcdef", out bytes, out error) && error.Contains("empty_image_response"), "backend empty download rejected");
             fake.Respond = () => Reply(HttpStatusCode.NotFound, "{\"error\":\"not_found\"}");

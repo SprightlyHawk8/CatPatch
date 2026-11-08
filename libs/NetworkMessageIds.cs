@@ -10,6 +10,10 @@ namespace CatPatchspace
         public const ushort SprayAlert = 31053;
         public const ushort SprayReject = 31054;
         public const ushort SprayClear = 31055;
+        public const ushort SprayFallbackProbe = 31056;
+        public const ushort SprayFallbackProbeAck = 31057;
+        public const ushort SprayFallbackToHost = 31058;
+        public const ushort SprayFallbackToClient = 31059;
 
         public const ushort HugRequest = 31060;
         public const ushort HugPrompt = 31061;
@@ -49,14 +53,8 @@ namespace CatPatchspace
         public const ushort CreatorJoinAlert = 31120;
         public const ushort AdminPrivilegeGranted = 31121;
 
-        public const ushort HostTransferOffer = 31130;
-        public const ushort HostTransferResponse = 31131;
-        public const ushort HostTransferSnapshotBegin = 31132;
-        public const ushort HostTransferSnapshotChunk = 31133;
-        public const ushort HostTransferSnapshotAck = 31134;
-        public const ushort HostTransferCommit = 31135;
-        public const ushort HostTransferAbort = 31136;
-        public const ushort HostTransferCommitReady = 31137;
+        // 31130-31137 are reserved for the archived host-transfer protocol.
+        // Do not reuse them for unrelated payloads sent by older clients.
 
         public const ushort LegacyHugRequest = 30990;
         public const ushort LegacyHugAlert = 30994;

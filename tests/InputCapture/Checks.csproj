@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Runtime/**/*.cs" />
+    <Compile Include="../../libs/CatPatchUiInput.cs" Link="CatPatchUiInput.cs" />
+    <Compile Include="../../libs/CatPatchConsoleGuard.cs" Link="CatPatchConsoleGuard.cs" />
+    <Compile Include="../../libs/CatPatchAdaptiveButtonGuard.cs" Link="CatPatchAdaptiveButtonGuard.cs" />
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,108 @@
+CatPatch 1.1.0 spray sharing safety - hardened 2026-11-07
+
+Implemented limits
+
+- Encoded file cap: 20,000,000 bytes (decimal 20 MB), on local uploads, incoming
+  transfers, backend response streams, cache reads and decoding entry points.
+- Width and height: each 1..4095 pixels, before native image decoding. This
+  interprets "smaller than 4K" as strictly below 4096 on each side.
+- PNG, JPEG and GIF contents only. Names/extensions cannot bypass format checks.
+  Preflight checks container lengths/endings and GIF subframe bounds, PNG CRCs
+  and supported headers, and baseline/progressive JPEG dimensions/markers.
+  Executable/SVG headers, appended data, APNG, compressed PNG metadata and
+  unsupported coding modes are rejected. This is structural validation, not
+  a replacement decoder or malware scanner.
+- GIF: at most 256 frames and at most 64 MiB of logical RGBA frame data across
+  the animation, checked before GDI loads it. Native dimensions/frame count are
+  compared with preflight before allocating frame textures. GDI, intermediate
+  bitmaps and Unity CPU/GPU copies mean actual process usage can exceed 64 MiB.
+- Wall rendering: at most 128 active sprays, 64 MiB of active encoded byte
+  references, 128 cached sprites, 128 MiB of RGBA texture data and a separate
+  64 MiB encoded cache admission budget. Clear-all/layer change destroys the
+  cached textures. Local selector previews have a 64-entry/64 MiB pixel budget.
+  GIF inspection retains at most one decoded animation.
+
+Fixed protocol trust/work boundaries
+
+- Fallback protocol is now 2; protocol-1 peers do not negotiate fallback.
+- A normal backend-ID peer upload must match the host's authoritative backend
+  bytes or already verified cache. Peer claims and peer-supplied checksums alone
+  cannot authenticate that mapping. Cache entries reject conflicting content.
+- If the host cannot verify a normal ID, its backup fails closed. Healthy backend
+  placement still works. A custom-<SHA256> upload is independent of host backend
+  connectivity and must match its own content hash.
+- Get can only request IDs placed in this layer; the authorization registry is
+  capped at 256. It never makes the host fetch arbitrary IDs from the backend.
+  A known placement can wait briefly for an in-progress seed. Registry eviction
+  can make an old backup unavailable until it is placed again.
+- New per-peer token buckets bound packet/control work, requests and cumulative
+  offered bytes. Initial request credit is 8, replenishing at 0.5 per second.
+  Offered byte credit is 40 MB, replenishing by 20 MB per 30 seconds. Packet
+  bytes are limited to a 2 MiB burst and 2 MiB/second per peer. Global limits
+  include 16 initial requests/2 per second and 64 MiB initial offered bytes/
+  2 MiB per second. Existing active-transfer/queue/window/time limits remain.
+- Cancellation does not refund offer work. Saving buffers remain accounted for
+  until their worker exits. Changing the peer session token does not reset its
+  quota ledger. Only the actual session reset clears the bounded ledger.
+- Placement processing has an independent 4-event burst/2 per second per sender,
+  plus a 32-event burst/16 per second lobby ceiling, regardless of a zero host
+  cooldown. A receiving client uses the lobby ceiling for the multiplexed host.
+  Packet IDs/lengths and finite positions within +/-1,000,000 are validated before
+  creating Unity objects. Malformed-packet warning output is rate limited.
+- Backend image responses use ResponseHeadersRead, a streamed byte cap even when
+  Content-Length is missing, and a cancellation deadline covering body reads.
+  Error bodies are capped at 64 KiB and buffered JSON replies at 1 MiB.
+- Old cache files are retired even when ordinary startup cleanup is disabled;
+  v2- filenames prevent old unauthenticated mappings from being imported as
+  trusted. Original spray-library files are not touched.
+
+Malware and crash claims
+
+CatPatch treats received files as data, accepts only the image formats above,
+and does not launch them, load them as code, run scripts or invoke a shell.
+Identifiers contain only allowed hex/custom-hash characters and locally chosen
+extensions; the network cannot select an arbitrary destination file path.
+
+These protections block the demonstrated poisoning, oversized-header, unplaced
+request and quota-evasion cases. They do not justify promising that nobody can
+send malicious image data or crash a lobby. Image decompression still occurs in
+Unity/GDI in the game process; compressed pixels are not fully decoded by the
+managed structural preflight. Undiscovered bugs in those native libraries remain
+possible. A malicious host is also authoritative for normal backend-ID relay
+content when a viewer cannot independently reach the backend. Content-hashed
+custom images remain hash-bound on every receiver, but a hash proves integrity,
+not that the pixels/content are benign.
+
+Together/Steam networking, OS/driver vulnerabilities, available process memory,
+and other mods are outside these guards. Sustained transport-level flooding can
+still cause lag/disconnection before CatPatch's receiver runs. Stronger isolation
+would require decoding in a separate restricted process and careful image
+normalization, not a claim that an extension or checksum is antivirus protection.
+Keep the game/OS updated. No remote-code-execution exploit was demonstrated.
+
+Verification
+
+- 25 preflight/quota checks pass, including exact 20 MB and 4095/4096 boundaries,
+  GIF frame/memory boundaries, all truncations of small fixtures, and 3000 seeded
+  malformed byte streams without unexpected validator exceptions.
+- 87 source-linked simulated fallback checks pass, including former cache-poison
+  reproductions now rejected, unplaced-request/oversize rejection, session-token
+  and cancellation churn quotas, authorization cleanup and another peer's success.
+- 166 native Unity/Mono checks pass: normal PNG/JPEG/GIF rendering, animated GIF
+  inspection, huge-header rejection before native allocation, texture/animation
+  budgets, placement quotas, invalid coordinates, fake HTTP length/content
+  rejection, and bounded/cancelled stream reads. HTTP is mocked in that probe.
+- 59 existing menu input checks pass. No menu diagnostic tracing was restored.
+- Builds have zero warnings/errors. See the dated V5_PORT_STATUS checkpoint and
+  ../backups/spray-hardening-2026-11-07/ for hashes, source/DLL backups and logs.
+- No live malicious Steam traffic, native exploit, sustained flood, or matching
+  host/client gameplay session was run. These tests do not prove such behavior.
+
+References used for the bounded container/HTTP implementation:
+https://www.w3.org/TR/png-3/
+https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption
+
+The initial pre-hardening findings remain preserved in
+../backups/spray-hardening-2026-11-07/SECURITY_REVIEW.txt.before and the earlier
+../backups/version-1.1.0-security-review-2026-11-07/ synthetic reproduction.

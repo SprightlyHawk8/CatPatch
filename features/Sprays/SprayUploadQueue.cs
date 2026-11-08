@@ -52,6 +52,11 @@ namespace CatPatchspace
             Action<string, byte[], string> onUploaded,
             Action<string> onFailed = null)
         {
+            if (SprayFallback.NetworkController.Instance != null)
+            {
+                SprayFallback.NetworkController.Instance.Service.Upload(sourceFilePath, onUploaded, onFailed);
+                return;
+            }
             if (string.IsNullOrWhiteSpace(sourceFilePath) || !File.Exists(sourceFilePath))
             {
                 Plugin.Logger.LogWarning("[Sprays] stage=upload.enqueue failed: source file missing");

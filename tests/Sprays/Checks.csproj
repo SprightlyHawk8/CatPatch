@@ -12,7 +12,9 @@
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameAssembliesDir)/UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="System.Net.Http"><HintPath>$(GameAssembliesDir)/System.Net.Http.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Newtonsoft.Json"><HintPath>$(GameAssembliesDir)/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="LiteNetLib"><HintPath>$(V5MultiplayerDir)/LiteNetLib.dll</HintPath><Private>false</Private></Reference>
     <Compile Include="../../features/Sprays/GifAnimationDecoder.cs" Link="GifAnimationDecoder.cs" />
+    <Compile Include="../../features/Sprays/SprayImageSafety.cs" Link="SprayImageSafety.cs" />
     <Compile Include="../../features/Sprays/GifAnimationData.cs" Link="GifAnimationData.cs" />
     <Compile Include="../../libs/backendclient.cs" Link="backendclient.cs" />
     <Compile Include="../../libs/backenderror.cs" Link="backenderror.cs" />

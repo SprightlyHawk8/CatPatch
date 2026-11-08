@@ -47,7 +47,13 @@ public sealed class SprayRuntimeChecks : BaseUnityPlugin
             byte[] bytes = File.ReadAllBytes(path);
             Texture2D first;
             string error;
-            Check(GifAnimationDecoder.TryCreateFirstFrameTexture(bytes, out first, out error), name + " first frame: " + error);
+            bool isGif = GifAnimationDecoder.IsGifBytes(bytes);
+            if (isGif) Check(GifAnimationDecoder.TryCreateFirstFrameTexture(bytes, out first, out error), name + " first frame: " + error);
+            else
+            {
+                first = new Texture2D(2,2); error = "";
+                Check(SprayImageSafety.TryValidate(bytes, out _, out error) && ImageConversion.LoadImage(first, bytes), name + " static frame: " + error);
+            }
             if (first == null) continue;
             Check(first.GetPixels32().Any(c => c.a > 0), name + " first frame contains visible pixels");
             object[] previewArgs = { path, null };
@@ -71,7 +77,7 @@ public sealed class SprayRuntimeChecks : BaseUnityPlugin
                 UnityEngine.Object.Destroy(wall);
             }
             GifAnimationData animation;
-            Check(GifAnimationDecoder.TryLoad(bytes, out animation, out error), name + " all frames: " + error);
+            Check(GifAnimationDecoder.TryLoad(bytes, out animation, out error) == isGif, name + " GIF-only animation decoder: " + error);
             if (animation != null)
             {
                 Check(animation.Frames.Length > 0 && animation.TotalDuration > 0, name + " valid timing");
@@ -96,6 +102,53 @@ public sealed class SprayRuntimeChecks : BaseUnityPlugin
         string invalidError;
         Check(!GifAnimationDecoder.TryLoad(new byte[] { 1, 2, 3 }, out invalid, out invalidError) && invalid == null && invalidError.Length > 0,
             "corrupt GIF fails with reason");
+        byte[] enormous = Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+        enormous[6] = enormous[8] = 0xff; enormous[7] = enormous[9] = 0x7f;
+        Check(!GifAnimationDecoder.TryLoad(enormous, out invalid, out invalidError) && invalid == null,
+            "enormous GIF rejected by preflight without native allocation");
+        object[] rejectedVisual = { "unsafe", enormous, Vector2.zero, 0UL, null, null };
+        Check(!(bool)visualType.GetMethod("TryCreateSpray").Invoke(visuals, rejectedVisual), "shipping wall renderer rejects enormous image");
+        visualType.GetMethod("ClearActiveSprays").Invoke(visuals, null);
+        byte[] validFixture = File.ReadAllBytes(Path.Combine(directory, "indexed.gif"));
+        object[] boundedVisual = { "budget-test", validFixture, Vector2.zero, 0UL, null, null };
+        visualType.GetField("_spritePixelBytes", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(visuals, 128L * 1024 * 1024);
+        Check(!(bool)visualType.GetMethod("TryCreateSpray").Invoke(visuals, boundedVisual), "shipping renderer rejects extra texture memory at its budget");
+        visualType.GetMethod("ClearActiveSprays").Invoke(visuals, null);
+        visualType.GetField("_spriteEncodedBytes", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(visuals, 64L * 1024 * 1024);
+        Check(!(bool)visualType.GetMethod("TryCreateSpray").Invoke(visuals, boundedVisual), "shipping renderer rejects extra encoded cache bytes at its budget");
+        visualType.GetMethod("ClearActiveSprays").Invoke(visuals, null);
+        var spriteCache = (System.Collections.IDictionary)visualType.GetField("_spriteCache", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(visuals);
+        for (int i = 0; i < 128; i++) spriteCache.Add("entry-" + i, null);
+        Check(!(bool)visualType.GetMethod("TryCreateSpray").Invoke(visuals, boundedVisual), "shipping renderer enforces texture-count budget");
+        visualType.GetMethod("ClearActiveSprays").Invoke(visuals, null);
+        var gifCache = (System.Collections.IDictionary)inspectorType.GetField("_gifAnimationCache", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(inspector);
+        Check(gifCache.Count <= 1, "shipping inspector retains at most one decoded animation");
+        object network = controllerType.GetField("_networkController", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(controller);
+        MethodInfo accept = network.GetType().GetMethod("AcceptPlacement", BindingFlags.Instance | BindingFlags.NonPublic);
+        bool firstFour = true;
+        for (int i = 0; i < 4; i++) firstFour &= (bool)accept.Invoke(network, new object[] { (ushort)65000 });
+        Check(firstFour && !(bool)accept.Invoke(network, new object[] { (ushort)65000 }), "shipping placement guard bounds repeated immediate peer requests");
+        Check((bool)accept.Invoke(network, new object[] { (ushort)65001 }), "another peer retains placement allowance after a peer exhausts its quota");
+        MethodInfo parse = network.GetType().GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .Single(m => m.Name == "TryReadSprayPacket" && m.GetParameters().Length == 4);
+        foreach (float x in new[] { float.NaN, float.PositiveInfinity, 1e12f, 12f })
+        {
+            var writer = new LiteNetLib.Utils.NetDataWriter(); writer.Put("abcdef"); writer.Put(x); writer.Put(0f); writer.Put(0UL);
+            object[] args = { new LiteNetLib.Utils.NetDataReader(writer.CopyData()), "", Vector2.zero, 0UL };
+            Check((bool)parse.Invoke(null, args) == (x == 12f), "shipping packet parser bounds position " + x);
+        }
+        object lobbyBudget = network.GetType().GetField("_placementGlobal", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(network);
+        FieldInfo tokens = lobbyBudget.GetType().GetField("_tokens", BindingFlags.Instance | BindingFlags.NonPublic);
+        double tokensBefore = (double)tokens.GetValue(lobbyBudget);
+        MethodInfo receive = network.GetType().GetMethod("OnClientSprayReceived", BindingFlags.Static | BindingFlags.NonPublic);
+        for (int i = 0; i < 8; i++)
+        {
+            var writer = new LiteNetLib.Utils.NetDataWriter(); writer.Put("../invalid");
+            object[] args = { Activator.CreateInstance(receive.GetParameters()[0].ParameterType), new LiteNetLib.Utils.NetDataReader(writer.CopyData()) };
+            receive.Invoke(null, args); // Invalid ID exits before downloads or Unity object creation.
+        }
+        Check((double)tokens.GetValue(lobbyBudget) < tokensBefore - 7,
+            "client applies lobby allowance rather than one player's four-event burst to host broadcasts");
         var a = new Texture2D(1, 1);
         var b = new Texture2D(1, 1);
         var timing = new GifAnimationData(new[] { a, b }, new[] { 0.02f, 0.03f });

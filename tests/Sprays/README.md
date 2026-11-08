@@ -4,6 +4,14 @@ These checks run in the installed Unity/Mono runtime, including its actual
 System.Drawing, Newtonsoft.Json, and Unity texture APIs. The main project
 excludes this test source. The probe is optional and must not ship with CatPatch.
 
+The hardened 1.1.0 pass has 166 checks, covering real PNG/JPEG/GIF rendering and
+inspection plus huge-header rejection before decoding, texture/animation cache
+budgets, placement quotas, finite-coordinate validation and the receiving client's
+lobby-wide allowance. The linked fake HTTP backend checks early Content-Length
+rejection, invalid contents, exact streamed byte boundaries and cancellation.
+It makes no real backend request or live Steam lobby connection. Broader managed
+preflight/fuzz and simulated-peer attacks are in SpraySafety and SprayFallback.
+
 From the v5 project folder, build CatPatch normally, then:
 
 ```powershell
@@ -14,7 +22,7 @@ $env:CATPATCH_SPRAY_CHECK_DIR = (Resolve-Path ../backups/spray-fixtures).Path
 
 You may add real GIFs to that local fixture directory. Do not commit private
 images. The fixture generator creates an indexed GIF, a GIF with a partial
-second frame and fast timing, and a JPEG deliberately named `.gif`.
+second frame and fast timing, and JPEG/PNG files deliberately named `.gif`.
 
 With the game closed, copy only `tests/Sprays/bin/Debug/netstandard2.1/`'s
 `CatPatch.SprayChecks.dll` into the test installation's CatPatch plugin folder.

@@ -56,14 +56,40 @@ namespace CatPatchspace
             }
         }
 
+        // Draw the updater before Together swaps in its multiplayer GUI skin.
+        // Its own OnGUI remains the fallback when Together's GUI is unavailable.
+        [HarmonyPatch(typeof(UIBullshit), "_GUI_DoTheFullGUI")]
+        internal static class UpdaterClassicGuiPatch
+        {
+            [HarmonyPrefix]
+            private static void Prefix() => CatPatchUpdater.DrawOverlayFromKrokMenu();
+        }
+
         [HarmonyPatch(typeof(UIBullshit), "__GUI__AllTheMenus")]
         internal static class MultiplayerAllMenusPatch
         {
+            [HarmonyPrefix]
+            private static bool Prefix(out bool __state)
+            {
+                __state = GUI.enabled;
+                // Process the foreground before Together can activate a button behind it.
+                CatPatchHostSettingsMenu.DrawOverlayFromKrokMenu();
+                CatPatchUpdater.BringPopupToFront();
+                bool runBackground = CatPatchUiInput.BeginBackgroundGui();
+                return runBackground;
+            }
+
             [HarmonyPostfix]
             private static void Postfix()
             {
-                CatPatchHostSettingsMenu.DrawOverlayFromKrokMenu();
                 CatPatchHostModerationMenu.DrawMenuButtonFromKrokMenu();
+            }
+
+            [HarmonyFinalizer]
+            private static void Finalizer(bool __state)
+            {
+                // Includes exceptions and passes where the background input handler was skipped.
+                GUI.enabled = __state;
             }
         }
 
@@ -86,39 +112,8 @@ namespace CatPatchspace
             [HarmonyPostfix]
             private static void Postfix(ref bool __result)
             {
-                if (!__result && CatPatchHostModerationMenu.IsPointerOverWindow())
-                    __result = true;
-            }
-        }
-
-        [HarmonyPatch]
-        internal static class ModerationAdaptiveButtonOverlayPatch
-        {
-            [HarmonyTargetMethod]
-            private static MethodBase TargetMethod()
-            {
-                MethodInfo[] methods = typeof(AdaptiveButton).GetMethods(
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-
-                for (int i = 0; i < methods.Length; i++)
-                {
-                    if (methods[i].Name == "overlayActive" && methods[i].ReturnType == typeof(bool))
-                        return methods[i];
-                }
-
-                return null;
-            }
-
-            [HarmonyPrepare]
-            private static bool Prepare()
-            {
-                return TargetMethod() != null;
-            }
-
-            [HarmonyPostfix]
-            private static void Postfix(ref bool __result)
-            {
-                if (CatPatchHostModerationMenu.IsWindowOpen)
+                if (!__result && (CatPatchUiInput.IsPointerInputCaptured()
+                    || CatPatchHostModerationMenu.IsPointerOverWindow()))
                     __result = true;
             }
         }

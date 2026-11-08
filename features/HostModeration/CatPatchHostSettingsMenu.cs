@@ -12,6 +12,21 @@ namespace CatPatchspace
         private static Rect _windowRect = new Rect(0f, 0f, 560f, 520f);
         private static Vector2 _windowScrollPosition;
 
+        internal static bool IsWindowOpen => _instance != null && _instance.isActiveAndEnabled
+            && _windowOpen && ShouldShowMenuButton();
+
+        internal static bool TryGetCaptureRect(out Rect rect)
+        {
+            rect = _windowRect;
+            return IsWindowOpen;
+        }
+
+        internal static bool TryGetButtonRect(out Rect rect)
+        {
+            rect = GetSettingsButtonRect();
+            return _instance != null && _instance.isActiveAndEnabled && ShouldShowMenuButton();
+        }
+
         private void Awake()
         {
             _instance = this;
@@ -20,12 +35,15 @@ namespace CatPatchspace
         private void OnDestroy()
         {
             if (_instance == this)
+            {
                 _instance = null;
+                _windowOpen = false;
+            }
         }
 
         private void OnGUI()
         {
-            if (TryGetKrokMenuOpen())
+            if (UIBullshit.main != null && UIBullshit.main.isActiveAndEnabled)
                 return;
 
             DrawOverlay();
@@ -53,14 +71,19 @@ namespace CatPatchspace
             GUI.color = Color.white;
             GUI.backgroundColor = Color.white;
             GUI.contentColor = Color.white;
-            GUI.enabled = true;
+            GUI.enabled = oldEnabled && !CatPatchUiInput.IsUpdaterPointerCaptured();
 
             try
             {
-                DrawSettingsButton();
-
                 if (_windowOpen)
+                {
                     DrawSettingsWindow();
+                    if (!CatPatchUiInput.IsUpdaterPointerCaptured())
+                        CatPatchUiInput.ConsumeWindowPointer(_windowRect);
+                }
+
+                // Ordinary windows keep this external toggle reachable while settings are open.
+                DrawSettingsButton();
             }
             finally
             {
@@ -74,15 +97,7 @@ namespace CatPatchspace
 
         private static void DrawSettingsButton()
         {
-            float scale = GetMenuScale();
-            float size = 103f * scale;
-            float gap = 2f * scale;
-
-            Rect buttonRect = new Rect(
-                Screen.width * 0.635f + gap,
-                Screen.height - size,
-                size,
-                size);
+            Rect buttonRect = GetSettingsButtonRect();
 
             GUIStyle style = CreateKrokStyleButton();
 
@@ -92,7 +107,7 @@ namespace CatPatchspace
             try
             {
                 if (GUI.Button(buttonRect, "Cat\nPatch", style))
-                    _windowOpen = !_windowOpen;
+                    ToggleWindow();
             }
             finally
             {
@@ -100,15 +115,45 @@ namespace CatPatchspace
             }
         }
 
+        private static void ToggleWindow()
+        {
+            _windowOpen = !_windowOpen;
+            if (_windowOpen)
+                InitializeWindowPositionOnce();
+            else
+                CatPatchUiInput.HoldSettingsClosingInput(_windowRect);
+            CatPatchUiInput.CaptureCanvasFocus();
+            if (!_windowOpen)
+                GUIUtility.keyboardControl = 0;
+        }
+
+        private static Rect GetSettingsButtonRect()
+        {
+            float scale = GetMenuScale();
+            float size = 103f * scale;
+            return new Rect(Screen.width * 0.635f + 2f * scale, Screen.height - size, size, size);
+        }
+
+        internal static bool IsPointerOverButton()
+        {
+            if (_instance == null || !_instance.isActiveAndEnabled || !ShouldShowMenuButton())
+                return false;
+            Vector2 mouse = Input.mousePosition;
+            mouse.y = Screen.height - mouse.y;
+            return GetSettingsButtonRect().Contains(mouse);
+        }
+
         private static void DrawSettingsWindow()
         {
             InitializeWindowPositionOnce();
 
+            CatPatchUiInput.CaptureCanvasFocus();
             _windowRect = GUI.Window(
                 "CatPatchHostSettings".GetHashCode(),
                 _windowRect,
                 DrawWindowContents,
                 "CatPatch Client Settings");
+            GUI.BringWindowToFront("CatPatchHostSettings".GetHashCode());
         }
 
         private static void InitializeWindowPositionOnce()
@@ -153,6 +198,19 @@ namespace CatPatchspace
             bool newShowSprays = DrawToggleRow("Show sprays", showSprays, labelStyle);
             if (newShowSprays != showSprays)
                 CatPatchClientSettings.ShowSprays = newShowSprays;
+
+            bool previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled && CatPatchClientSettings.ShowSprays;
+            bool sendFallback = CatPatchClientSettings.SendSprayFallback;
+            bool newSendFallback = DrawToggleRow("Send sprays over Steam fallback", sendFallback, labelStyle);
+            if (newSendFallback != sendFallback)
+                CatPatchClientSettings.SendSprayFallback = newSendFallback;
+            bool clearCache = CatPatchClientSettings.ClearSprayFallbackCacheOnStartup;
+            bool newClearCache = DrawToggleRow("Clear spray fallback cache on startup", clearCache, labelStyle);
+            if (newClearCache != clearCache)
+                CatPatchClientSettings.ClearSprayFallbackCacheOnStartup = newClearCache;
+            GUI.enabled = previousEnabled;
+            GUILayout.Label("Shares a backup through the lobby host if the spray backend fails.", labelStyle);
 
             GUILayout.Label("Spray selector size: " + CatPatchClientSettings.SprayMenuScale.ToString("0.00") + "x", labelStyle);
             float sprayMenuScale = GUILayout.HorizontalSlider(CatPatchClientSettings.SprayMenuScale, 0.75f, 3f);

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <Import Project="../../vars.targets" />
+  <ItemGroup>
+    <Reference Include="LiteNetLib"><HintPath>$(V5MultiplayerDir)/LiteNetLib.dll</HintPath></Reference>
+    <Reference Include="Steamworks.NET"><HintPath>$(V5MultiplayerDir)/Steamworks.NET.dll</HintPath></Reference>
+    <Compile Include="../../features/FullResSpraysfallback/NetworkController.cs" Link="NetworkController.cs" />
+    <Compile Include="../../features/FullResSpraysfallback/IntegratedSprayService.cs" Link="IntegratedSprayService.cs" />
+    <Compile Include="../../features/FullResSpraysfallback/SprayImage.cs" Link="SprayImage.cs" />
+    <Compile Include="../../features/FullResSpraysfallback/SprayCache.cs" Link="SprayCache.cs" />
+    <Compile Include="../../features/FullResSpraysfallback/FragmentBuffer.cs" Link="FragmentBuffer.cs" />
+    <Compile Include="../../features/FullResSpraysfallback/TransferRateLimit.cs" Link="TransferRateLimit.cs" />
+    <Compile Include="../../features/Sprays/SprayImageSafety.cs" Link="SprayImageSafety.cs" />
+    <Compile Include="../../libs/CatPatchClientSettings.cs" Link="CatPatchClientSettings.cs" />
+    <Compile Include="../../libs/NetworkMessageIds.cs" Link="NetworkMessageIds.cs" />
+  </ItemGroup>
+</Project>

@@ -32,7 +32,7 @@ namespace CatPatchspace
 
             try
             {
-                return TryLoad(File.ReadAllBytes(path), out animation, out error);
+                return TryLoad(SprayImageSafety.ReadFile(path), out animation, out error);
             }
             catch (Exception ex)
             {
@@ -46,9 +46,9 @@ namespace CatPatchspace
             animation = null;
             error = "";
 
-            if (gifBytes == null || gifBytes.Length == 0)
+            if (!IsGifBytes(gifBytes) || !SprayImageSafety.TryValidate(gifBytes, out var safeInfo, out error))
             {
-                error = "GIF file was empty.";
+                if (string.IsNullOrEmpty(error)) error = "Invalid GIF image.";
                 return false;
             }
 
@@ -66,9 +66,9 @@ namespace CatPatchspace
                 {
                     object dimension = CreateFrameDimension(image);
                     int frameCount = InvokeInt(image, "GetFrameCount", dimension);
-                    if (frameCount <= 0)
+                    if (frameCount != safeInfo.Frames || GetProperty<int>(image, "Width") != safeInfo.Width || GetProperty<int>(image, "Height") != safeInfo.Height)
                     {
-                        error = "GIF contained no frames.";
+                        error = "Native GIF metadata does not match the validated image.";
                         return false;
                     }
 
@@ -104,6 +104,12 @@ namespace CatPatchspace
             texture = null;
             error = "";
 
+            if (!IsGifBytes(gifBytes) || !SprayImageSafety.TryValidate(gifBytes, out var safeInfo, out error))
+            {
+                if (string.IsNullOrEmpty(error)) error = "Invalid GIF image.";
+                return false;
+            }
+
             if (!DrawingTypesAvailable())
             {
                 error = "The game's System.Drawing GIF decoder is unavailable.";
@@ -115,6 +121,8 @@ namespace CatPatchspace
                 using (MemoryStream input = new MemoryStream(gifBytes, false))
                 using (IDisposable image = LoadImage(input))
                 {
+                    if (GetProperty<int>(image, "Width") != safeInfo.Width || GetProperty<int>(image, "Height") != safeInfo.Height)
+                        throw new InvalidDataException("Native GIF dimensions do not match the validated image.");
                     object dimension = CreateFrameDimension(image);
                     Invoke(image, "SelectActiveFrame", dimension, 0);
                     texture = CreateTextureFromFrame(image, 0);

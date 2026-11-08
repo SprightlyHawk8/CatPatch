@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using UnityEngine;
+using Together;
 
 namespace CatPatchspace
 {
@@ -35,6 +36,7 @@ namespace CatPatchspace
         private double _startupCheckAt;
         private Rect _popupRect;
         private Vector2 _popupScrollPosition;
+        private GUISkin _popupSkin;
 
         public bool UpdateAvailable
         {
@@ -110,6 +112,35 @@ namespace CatPatchspace
 
         public static CatPatchUpdater Instance { get; private set; }
 
+        internal static bool IsPopupOpen
+        {
+            get
+            {
+                var updater = Instance;
+                if (updater == null || !updater.isActiveAndEnabled)
+                    return false;
+                lock (Sync)
+                    return updater._showStartupPopup && updater._updateAvailable && updater._manifest != null;
+            }
+        }
+
+        internal static bool IsPointerOverPopup()
+        {
+            return IsPopupOpen && Instance._popupRect.Contains(CatPatchUiInput.GetLiveGuiPointerPosition());
+        }
+
+        internal static bool TryGetCaptureRect(out Rect rect)
+        {
+            rect = Instance != null ? Instance._popupRect : default;
+            return IsPopupOpen;
+        }
+
+        internal static void BringPopupToFront()
+        {
+            if (IsPopupOpen)
+                GUI.BringWindowToFront("CatPatchUpdatePopup".GetHashCode());
+        }
+
         private void Awake()
         {
             Instance = this;
@@ -127,6 +158,14 @@ namespace CatPatchspace
         {
             _startupCheckAt = Time.realtimeSinceStartupAsDouble + StartupCheckDelaySeconds;
             _popupRect = CreateDefaultPopupRect();
+        }
+
+        private void OnDestroy()
+        {
+            if (_popupSkin != null)
+                Destroy(_popupSkin);
+            if (Instance == this)
+                Instance = null;
         }
 
         private void Update()
@@ -355,6 +394,19 @@ namespace CatPatchspace
 
         private void OnGUI()
         {
+            if (UIBullshit.main != null && UIBullshit.main.isActiveAndEnabled)
+                return;
+            DrawOverlay();
+        }
+
+        internal static void DrawOverlayFromKrokMenu()
+        {
+            if (Instance != null && Instance.isActiveAndEnabled)
+                Instance.DrawOverlay();
+        }
+
+        private void DrawOverlay()
+        {
             CatPatchUpdateManifest manifest;
             string status;
             string error;
@@ -377,12 +429,33 @@ namespace CatPatchspace
                 canApply = _downloadComplete && IsDllPackage(_manifest, _downloadPath);
             }
 
-            ClampPopupToScreen();
-            _popupRect = GUI.Window(
-                "CatPatchUpdatePopup".GetHashCode(),
-                _popupRect,
-                _ => DrawUpdatePopup(manifest, status, error, downloadPath, isBusy, downloadComplete, canApply),
-                "CatPatch Update Available");
+            int oldDepth = GUI.depth;
+            bool oldEnabled = GUI.enabled;
+            GUISkin oldSkin = GUI.skin;
+            try
+            {
+                // This entry runs before Together applies its MP skin. Keep a private
+                // copy so this updater continues using the original IMGUI controls.
+                if (_popupSkin == null)
+                    _popupSkin = Instantiate(oldSkin);
+                GUI.skin = _popupSkin;
+                GUI.depth = -31000;
+                GUI.enabled = true;
+                ClampPopupToScreen();
+                _popupRect = GUI.Window(
+                    "CatPatchUpdatePopup".GetHashCode(),
+                    _popupRect,
+                    _ => DrawUpdatePopup(manifest, status, error, downloadPath, isBusy, downloadComplete, canApply),
+                    "CatPatch Update Available");
+                GUI.BringWindowToFront("CatPatchUpdatePopup".GetHashCode());
+                CatPatchUiInput.CaptureUpdaterInput(_popupRect);
+            }
+            finally
+            {
+                GUI.depth = oldDepth;
+                GUI.enabled = oldEnabled;
+                GUI.skin = oldSkin;
+            }
         }
 
         private void DrawUpdatePopup(
@@ -465,6 +538,7 @@ namespace CatPatchspace
         {
             lock (Sync)
                 _showStartupPopup = false;
+            CatPatchUiInput.HoldUpdaterClosingInput(_popupRect);
         }
 
         private static Rect CreateDefaultPopupRect()

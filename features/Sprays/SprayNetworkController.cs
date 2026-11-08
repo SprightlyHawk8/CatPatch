@@ -32,6 +32,20 @@ namespace CatPatchspace
         private readonly Dictionary<string, PendingClientSprayAcks> _pendingClientAcks = new Dictionary<string, PendingClientSprayAcks>();
         private readonly Dictionary<knetid, double> _nextAllowedServerSprayByClientId = new Dictionary<knetid, double>();
         private int _layerGeneration;
+        private readonly Dictionary<ushort, SprayFallback.TransferRateLimit> _placementBudgets = new();
+        private readonly SprayFallback.TransferRateLimit _placementGlobal = new(32, 16);
+        private readonly SprayFallback.TransferRateLimit _decodeWarnings = new(4, 1);
+
+        private bool AcceptPlacement(ushort peer)
+        {
+            if (!_placementBudgets.TryGetValue(peer, out var budget))
+            {
+                if (_placementBudgets.Count >= 256) return false;
+                _placementBudgets[peer] = budget = new SprayFallback.TransferRateLimit(4, 2);
+            }
+            double now = Time.realtimeSinceStartupAsDouble;
+            return budget.Take(1, now) && _placementGlobal.Take(1, now);
+        }
 
         public SprayNetworkController(SprayVisualController visualController)
         {
@@ -54,11 +68,13 @@ namespace CatPatchspace
 
         public void ClearLayerState()
         {
+            SprayFallback.NetworkController.Instance?.Service.ClearScene();
             _layerGeneration++;
             _localClientSprayKeys.Clear();
             _pendingServerAcks.Clear();
             _pendingClientAcks.Clear();
             _nextAllowedServerSprayByClientId.Clear();
+            _placementBudgets.Clear();
         }
 
         public void RegisterHandlersOnce()
@@ -89,6 +105,8 @@ namespace CatPatchspace
 
         public void SendOrSpawnSpray(string sprayId, byte[] localImageBytes, Vector2 position, string sourceFilePath = "")
         {
+            if (!CatPatchClientSettings.ShowSprays)
+                return;
             sprayId = NormalizeSprayId(sprayId);
             if (!IsValidSprayId(sprayId))
             {
@@ -96,11 +114,13 @@ namespace CatPatchspace
                 return;
             }
 
-            if (KrokoshaScavMultiplayer.is_server)
+            if (!KrokoshaScavMultiplayer.network_system_is_running || KrokoshaScavMultiplayer.is_server)
             {
+                SprayFallback.NetworkController.Instance?.MarkPlaced(sprayId);
                 knetid ownerClientId = ScavPlayer.LocalPlayer != null ? ScavPlayer.LocalPlayer.playerId : new knetid(0);
                 SpawnLocalSprayFromBestSource(sprayId, localImageBytes, position, ownerClientId, sourceFilePath);
-                BroadcastSprayToClients(ownerClientId, sprayId, position);
+                if (KrokoshaScavMultiplayer.network_system_is_running)
+                    BroadcastSprayToClients(ownerClientId, sprayId, position);
                 return;
             }
 
@@ -141,7 +161,7 @@ namespace CatPatchspace
 
         private static void OnServerSprayReceived(knetid senderClientId, ref NetDataReader reader)
         {
-            if (_instance == null)
+            if (_instance == null || !_instance.AcceptPlacement(senderClientId.id))
                 return;
 
             string sprayId;
@@ -168,6 +188,7 @@ namespace CatPatchspace
             }
 
             _instance._nextAllowedServerSprayByClientId[senderClientId] = now + CatPatchServerSettings.SprayCooldownSeconds;
+            SprayFallback.NetworkController.Instance?.MarkPlaced(sprayId);
             _instance.SpawnLocalSprayFromBackend(sprayId, position, senderClientId);
             _instance.SendSprayServerAck(senderClientId, sprayId, position);
             _instance.BroadcastSprayToClients(senderClientId, sprayId, position);
@@ -210,7 +231,9 @@ namespace CatPatchspace
 
         private static void OnClientSprayReceived(knetid senderClientId, ref NetDataReader reader)
         {
-            if (_instance == null)
+            // The host multiplexes every player's placements; apply the lobby
+            // ceiling here rather than treating the whole lobby as one player.
+            if (_instance == null || !_instance._placementGlobal.Take(1, Time.realtimeSinceStartupAsDouble))
                 return;
 
             string sprayId;
@@ -344,15 +367,17 @@ namespace CatPatchspace
 
             try
             {
-                sprayId = NormalizeSprayId(reader.GetString());
+                if (reader.AvailableBytes > 256) return false;
+                sprayId = NormalizeSprayId(reader.GetString(MaxSprayIdLength));
                 if (!IsValidSprayId(sprayId))
                 {
-                    Plugin.Logger.LogWarning("[Sprays] stage=network.decode failed: invalid spray ID");
                     return false;
                 }
 
                 float x = reader.GetFloat();
                 float y = reader.GetFloat();
+                if (float.IsNaN(x) || float.IsNaN(y) || float.IsInfinity(x) || float.IsInfinity(y)
+                    || System.Math.Abs(x) > 1_000_000 || System.Math.Abs(y) > 1_000_000) return false;
                 position = new Vector2(x, y);
 
                 if (reader.AvailableBytes >= 8)
@@ -362,7 +387,8 @@ namespace CatPatchspace
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogWarning("[Sprays] stage=network.decode failed: " + ex.GetType().Name + ": " + ex.Message);
+                if (_instance != null && _instance._decodeWarnings.Take(1, Time.realtimeSinceStartupAsDouble))
+                    Plugin.Logger.LogWarning("[Sprays] stage=network.decode failed: " + ex.GetType().Name + ": " + ex.Message);
                 return false;
             }
         }
@@ -620,21 +646,7 @@ namespace CatPatchspace
 
         private static bool IsValidSprayId(string sprayId)
         {
-            if (string.IsNullOrWhiteSpace(sprayId))
-                return false;
-
-            if (sprayId.Length > MaxSprayIdLength)
-                return false;
-
-            for (int i = 0; i < sprayId.Length; i++)
-            {
-                char c = sprayId[i];
-                bool isHex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-                if (!isHex)
-                    return false;
-            }
-
-            return true;
+            return SprayFallback.SprayImage.IsValidId(sprayId);
         }
 
         private static string BuildSprayInstanceKey(string sprayId, Vector2 position)

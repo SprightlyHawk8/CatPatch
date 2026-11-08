@@ -71,6 +71,11 @@ namespace CatPatchspace
 
         private void Update()
         {
+            if (CatPatchUiInput.IsPointerInputCaptured())
+            {
+                _activeSliderKey = null;
+                return;
+            }
             if (_windowOpen && Input.GetKeyDown(KeyCode.Escape))
             {
                 _windowOpen = false;
@@ -140,7 +145,7 @@ namespace CatPatchspace
             GUI.color = Color.white;
             GUI.backgroundColor = Color.white;
             GUI.contentColor = Color.white;
-            GUI.enabled = true;
+            GUI.enabled = oldEnabled && !CatPatchUiInput.IsPointerInputCaptured();
 
             try
             {
@@ -181,7 +186,7 @@ namespace CatPatchspace
             GUI.color = Color.white;
             GUI.backgroundColor = Color.white;
             GUI.contentColor = Color.white;
-            GUI.enabled = true;
+            GUI.enabled = oldEnabled && !CatPatchUiInput.IsPointerInputCaptured();
 
             try
             {
@@ -798,7 +803,7 @@ namespace CatPatchspace
 
             DrawActionGridRow(width, ref y, selected, buttonWidth, buttonHeight, gap,
                 new ActionButton("Last Stand", TryForceLastStandSelected, "last_stand"),
-                new ActionButton("Transfer Host", TryTransferHostSelected, "transfer_host"),
+                ActionButton.Empty,
                 ActionButton.Empty,
                 ActionButton.Empty);
 
@@ -922,6 +927,12 @@ namespace CatPatchspace
             GUI.Label(new Rect(settingsRect.xMax - 66f, settingsRect.y + 54f, 58f, 20f), cooldown.ToString("0") + "s", _rowMainStyle);
 
             y += 94f;
+
+            bool allowFallback = CatPatchServerSettings.AllowSprayFallback;
+            if (DrawPlayerButton(new Rect(8f, y, width - 16f, 36f),
+                "Lobby spray fallback: " + (allowFallback ? "ON" : "OFF"), true))
+                CatPatchServerSettings.AllowSprayFallback = !allowFallback;
+            y += 44f;
 
             if (players.Count == 0)
             {
@@ -2415,14 +2426,6 @@ namespace CatPatchspace
                 body.ResetHealth(true);
             SetStatus("Revived " + name + ".", false);
             return true;
-        }
-
-        private static bool TryTransferHostSelected(ulong clientId, string name)
-        {
-            string message;
-            bool ok = HostTransferController.TryOfferTransfer(clientId, name, out message);
-            SetStatus(message, !ok);
-            return ok;
         }
 
         private static bool TryKillSelected(ulong clientId, string name)

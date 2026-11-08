@@ -9,6 +9,7 @@ namespace CatPatchspace
 
         private readonly List<GameObject> _activeSprays = new List<GameObject>();
         private readonly Dictionary<string, Sprite> _spriteCache = new Dictionary<string, Sprite>();
+        private long _spritePixelBytes, _spriteEncodedBytes;
         private bool _lastVisible;
         private bool _hasLastVisible;
 
@@ -51,7 +52,20 @@ namespace CatPatchspace
                 cleared++;
             }
 
+            ClearSpriteCache();
             return cleared;
+        }
+
+        private void ClearSpriteCache()
+        {
+            foreach (var sprite in _spriteCache.Values)
+            {
+                if (sprite == null) continue;
+                if (sprite.texture != null) Object.Destroy(sprite.texture);
+                Object.Destroy(sprite);
+            }
+            _spriteCache.Clear();
+            _spritePixelBytes = _spriteEncodedBytes = 0;
         }
 
         public int ClearActiveSpraysByOwner(ulong? ownerClientId)
@@ -136,6 +150,19 @@ namespace CatPatchspace
                 return false;
             }
 
+            long retainedBytes = 0;
+            for (int i = _activeSprays.Count - 1; i >= 0; i--)
+            {
+                if (_activeSprays[i] == null) { _activeSprays.RemoveAt(i); continue; }
+                var existing = _activeSprays[i].GetComponent<SprayInstance>();
+                retainedBytes += existing?.ImageBytes?.Length ?? 0;
+            }
+            if (_activeSprays.Count >= 128 || retainedBytes + imageBytes.Length > 64L * 1024 * 1024)
+            {
+                error = "Local spray display budget reached. Clear sprays to free space.";
+                return false;
+            }
+
             Sprite sprite;
             if (!TryGetOrCreateSprite(
                     visualCacheKey,
@@ -192,6 +219,15 @@ namespace CatPatchspace
                 return true;
             }
 
+            if (string.IsNullOrWhiteSpace(cacheKey) || !SprayImageSafety.TryValidate(imageBytes, out var info, out error))
+                return false;
+            if (_spriteCache.Count >= 128 || _spritePixelBytes + info.FrameBytes > 128L * 1024 * 1024
+                || _spriteEncodedBytes + imageBytes.Length > 64L * 1024 * 1024)
+            {
+                error = "Local spray texture budget reached. Clear sprays to free space.";
+                return false;
+            }
+
             Texture2D texture;
             if (GifAnimationDecoder.IsGifBytes(imageBytes))
             {
@@ -202,12 +238,16 @@ namespace CatPatchspace
             {
                 texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
 
-                if (!ImageConversion.LoadImage(texture, imageBytes))
+                try
                 {
-                    Object.Destroy(texture);
-                    error = "Failed to load image bytes into Texture2D.";
-                    return false;
+                    if (!ImageConversion.LoadImage(texture, imageBytes) || texture.width != info.Width || texture.height != info.Height)
+                    {
+                        Object.Destroy(texture);
+                        error = "Image decoder failed or returned unexpected dimensions.";
+                        return false;
+                    }
                 }
+                catch (System.Exception ex) { Object.Destroy(texture); error = ex.Message; return false; }
 
                 texture.wrapMode = TextureWrapMode.Clamp;
                 texture.filterMode = FilterMode.Bilinear;
@@ -222,7 +262,11 @@ namespace CatPatchspace
                 pixelsPerUnit);
 
             if (!string.IsNullOrWhiteSpace(cacheKey))
+            {
                 _spriteCache[cacheKey] = sprite;
+                _spritePixelBytes += info.FrameBytes;
+                _spriteEncodedBytes += imageBytes.Length;
+            }
 
             return true;
         }

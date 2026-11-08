@@ -10,7 +10,7 @@ namespace CatPatchspace
     {
         public const string ModGUID = "meow.catpatch";
         public const string ModName = "CatPatch";
-        public const string ModVersion = "1.0.8";
+        public const string ModVersion = "1.1.0";
 
         internal static new ManualLogSource Logger;
         private readonly Harmony _harmony = new(ModGUID);
@@ -27,6 +27,7 @@ namespace CatPatchspace
             CatPatchKeybinds.RegisterDefaultsOnce();
             CatPatchServerSettings.Bind(Config);
             CatPatchClientSettings.Bind(Config);
+            gameObject.AddComponent<SprayFallback.NetworkController>();
             gameObject.AddComponent<SpraySoundPlayer>();
 
             gameObject.AddComponent<HugController>();
@@ -37,7 +38,6 @@ namespace CatPatchspace
             gameObject.AddComponent<SelfHarmRescueController>();
             gameObject.AddComponent<CreatorJoinAnnouncer>();
             gameObject.AddComponent<AdminPrivilegeController>();
-            gameObject.AddComponent<HostTransferController>();
             gameObject.AddComponent<ChallengeModeController>();
             gameObject.AddComponent<SprayController>();
             gameObject.AddComponent<SprayInspector>();

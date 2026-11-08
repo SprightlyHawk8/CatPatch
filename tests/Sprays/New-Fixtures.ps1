@@ -9,6 +9,7 @@ try {
     $bitmap.SetPixel(1, 0, [System.Drawing.Color]::Green)
     $bitmap.Save((Join-Path $fixtureDirectory 'indexed.gif'), [System.Drawing.Imaging.ImageFormat]::Gif)
     $bitmap.Save((Join-Path $fixtureDirectory 'jpeg-as-gif.gif'), [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $bitmap.Save((Join-Path $fixtureDirectory 'png-as-gif.gif'), [System.Drawing.Imaging.ImageFormat]::Png)
 } finally { $bitmap.Dispose() }
 # Two-color, two-frame GIF: red/green canvas, then a green 1x1 subframe.
 # Delays are 20 ms and 30 ms; the second frame must retain the other pixel.

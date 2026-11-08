@@ -11,7 +11,7 @@ namespace CatPatchspace
 
         public static bool IsGameInputUiActive()
         {
-            return IsConsoleActive() || IsCraftingMenuActive();
+            return CatPatchUiInput.IsShortcutInputCaptured() || IsConsoleActive() || IsCraftingMenuActive();
         }
 
         private static bool IsConsoleActive()
