@@ -45,6 +45,13 @@ including after dragging, rather than a stale or window-local IMGUI event positi
 The temporary menu click-tracing and startup hook-audit logs have been removed
 for 1.1.0. The input guards remain active.
 
+Update notifications still check the version and show the changelog from the
+GitHub manifest. **Download on Nexus** opens the
+[Nexus Mods files page](https://www.nexusmods.com/scavprototype/mods/69?tab=files)
+in your browser, from both the notification and CP settings. Download and install
+updates manually with the game closed. CatPatch no longer downloads update
+packages, replaces its DLL, or creates an update helper.
+
 CatPatch shortcuts also pause while Together's multiplayer/pause menu is open,
 including its bug-report editor, while chat is focused, or while typing in a Unity
 text field. Opening a menu cancels a held spray selector or emote wheel, so releasing

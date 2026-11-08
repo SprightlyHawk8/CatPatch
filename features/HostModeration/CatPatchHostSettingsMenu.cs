@@ -318,6 +318,9 @@ namespace CatPatchspace
                 GUI.enabled = oldEnabled;
             }
 
+            if (GUILayout.Button("Download on Nexus", buttonStyle, GUILayout.Height(42f)))
+                CatPatchUpdater.OpenNexusDownloads();
+
             GUILayout.EndHorizontal();
 
             GUILayout.Label("Installed: " + Plugin.ModVersion, labelStyle);
