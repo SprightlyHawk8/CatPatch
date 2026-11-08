@@ -995,7 +995,7 @@ namespace CatPatchspace
 
         private static void DrawMeowsFinalChallengeTab(float width, ref float y)
         {
-            CatPatchServerSettings.DogpileRadius = 1.00f;
+            CatPatchServerSettings.DogpileRadius = 3.00f;
             GUI.Label(new Rect(8f, y, width - 16f, 34f), "Dogpile Sleep", _sectionHeaderStyle);
             y += 38f;
 

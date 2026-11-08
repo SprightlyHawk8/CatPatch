@@ -6,7 +6,7 @@ namespace CatPatchspace
 {
     internal sealed class DogpileController : MonoBehaviour
     {
-        private const double ScanIntervalSeconds = 0.25;
+        private const double ScanIntervalSeconds = 1;
 
         private readonly Dictionary<Body, double> _sleepStartedAtByBody = new Dictionary<Body, double>();
         private readonly Dictionary<Body, DogpileBoostState> _boostStatesByBody = new Dictionary<Body, DogpileBoostState>();
@@ -151,7 +151,7 @@ namespace CatPatchspace
             if (!state.AnnouncedLocally && IsLocalBody(body))
             {
                 state.AnnouncedLocally = true;
-                HugController.ShowLocalMessage("Dogpile sleep boost activated. Sleep quality: Good.");
+                HugController.ShowLocalMessage("Dogpile sleep boost activated for you. Sleep quality: Good.");
             }
 
             bool canApplyAuthoritativeEffects = KrokoshaScavMultiplayer.is_server;

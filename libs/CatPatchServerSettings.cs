@@ -33,7 +33,7 @@ namespace CatPatchspace
         private static ConfigEntry<int> _challengeElderThornbackCount;
         private static float _sprayCooldownSecondsValue = 20f;
         private static bool _dogpileEnabledValue = true;
-        private static float _dogpileRadiusValue = 1.00f;
+        private static float _dogpileRadiusValue = 3.00f;
         private static bool _piggybackThrowEnabledValue = false;
         private static float _piggybackThrowStrengthValue = 28.0f;
         private static bool _challengeModeEnabledValue = false;
@@ -99,7 +99,7 @@ namespace CatPatchspace
 
             set
             {
-                _dogpileRadiusValue = 1.00f;
+                _dogpileRadiusValue = 3.00f;
                 if (_dogpileRadius != null)
                     _dogpileRadius.Value = _dogpileRadiusValue;
             }
@@ -406,10 +406,10 @@ namespace CatPatchspace
             _dogpileRadius = config.Bind(
                 "Server Settings",
                 "DogpileRadius",
-                1.00f,
-                "Distance in world units used to group nearby sleeping players into a dogpile. CatPatch currently hardcodes this to 1.00.");
-            _dogpileRadius.Value = 1.00f;
-            _dogpileRadiusValue = 1.00f;
+                3.00f,
+                "Distance in world units used to group nearby sleeping players into a dogpile. CatPatch currently hardcodes this to 3.00.");
+            _dogpileRadius.Value = 3.00f;
+            _dogpileRadiusValue = 3.00f;
 
             _piggybackThrowEnabled = config.Bind(
                 "Server Settings",
