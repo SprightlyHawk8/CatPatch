@@ -38,8 +38,8 @@ namespace CatPatchspace
                 }
             }
 
-            if (harmCalls != 1 || suicideCalls != 1)
-                throw new InvalidOperationException("Self-harm rescue expected one SelfHarm and one Suicide call in AttemptHarm.");
+            if (harmCalls != 1 || suicideCalls != 2)
+                throw new InvalidOperationException("Self-harm rescue expected one SelfHarm and two Suicide calls in AttemptHarm.");
 
             return result;
         }
