@@ -75,6 +75,15 @@ namespace CatPatchspace
             "I guess I'm trans now..?", // -- that doesnt make any sense at all
             "Oh yeah, keep jorking me, oh yeah ong ong", // -- what the fuck
             "Orsoniks approved mod!", // -- ooc
+            
+            // Baba
+            "Bro... i had an idea, you drink milk, i eat cereal and then...",
+            "Oh~ You like kissing expies dont you?~",
+            "Oh~ You like kissing me dont you?~",
+            ">///<",
+            "Baba was            hereee! :3c",
+            "Bro... if you keep being cute like this i... idk",
+            "I love you too <3",
 
             // overhaul
             "I think... I liked that.",
